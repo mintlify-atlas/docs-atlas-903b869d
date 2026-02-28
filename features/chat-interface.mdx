@@ -1,0 +1,294 @@
+---
+title: Chat Interface
+description: Interact with Dashi through a beautiful, gradient-styled chat interface with streaming responses and message history
+---
+
+## Overview
+
+Dashi's chat interface provides a modern, interactive way to communicate with your AI assistant. Activated with **Cmd+Opt+T**, it features a sleek design with gradient colors, streaming responses, and persistent message history during your session.
+
+## Activating Chat Mode
+
+There are two ways to enter chat mode:
+
+1. **Keyboard shortcut**: Press **Cmd+Opt+T** (or **Ctrl+Alt+T** on Windows/Linux)
+2. **Test mode**: Press **T** key (development/testing)
+
+From `src/components/ui/dashimain.tsx:179-189`:
+
+```typescript
+const isTKey = event.key === "t" || event.key === "T" || event.keyCode === 84;
+if ((event.metaKey || event.ctrlKey) && event.altKey && isTKey) {
+  if (isActivated && !isActivatedState) {
+    setIsActivatedState(true);
+    setIsExpanded(false); // Reset voice expansion
+  }
+}
+```
+
+<Note>
+Chat mode automatically disables voice expansion mode when activated, ensuring a clean interface transition.
+</Note>
+
+## Interface Layout
+
+When activated, the chat interface appears with these dimensions and styling:
+
+- **Width**: 400px
+- **Height**: 600px  
+- **Position**: Centered horizontally with offset `calc(50% - 200px)`
+- **Color scheme**: Gradient colors (#D500D8 magenta and #8CEBE5 cyan)
+
+### Components
+
+#### 1. Dashi Avatar
+
+The Dashi character appears in the top-left corner:
+- **Size**: 60px × 60px
+- **Position**: 30px from top
+- **Gradient**: Vertical gradient from #D500D8 to #8CEBE5
+
+#### 2. Messages Area
+
+The scrollable message container:
+- **Height**: 420px
+- **Background**: Semi-transparent black (#18181b at 30% opacity)
+- **Border radius**: 16px
+- **Overflow**: Auto scroll on Y-axis
+
+From `src/components/ui/dashimain.tsx:503-519`:
+
+```typescript
+<div
+  style={{
+    overflowY: "auto",
+    padding: "14px",
+    borderRadius: "16px",
+    background: "transparent",
+    height: "420px",
+  }}
+>
+  {chatMessages.map((message, index) => (
+    // Message rendering
+  ))}
+</div>
+```
+
+#### 3. Chat Input Form
+
+The input area at the bottom:
+- **Input field**: Flexible width with rounded corners
+- **Send button**: Fixed-width cyan button
+- **Gap**: 10px between elements
+
+## Message Styling
+
+### User Messages
+
+- **Alignment**: Right-aligned
+- **Background**: #8CEBE5 (cyan)
+- **Text color**: #000 (black)
+- **Max width**: 80% of container
+- **Border radius**: 12px
+
+### Dashi Responses
+
+- **Alignment**: Left-aligned  
+- **Background**: #D500D8 (magenta)
+- **Text color**: #fff (white)
+- **Max width**: 80% of container
+- **Border radius**: 12px
+
+From `src/components/ui/dashimain.tsx:520-542`:
+
+```typescript
+<div
+  style={{
+    display: "inline-block",
+    padding: "8px 12px",
+    borderRadius: "12px",
+    backgroundColor: message.isUser ? "#8CEBE5" : "#D500D8",
+    color: message.isUser ? "#000" : "#fff",
+    maxWidth: "80%",
+    wordWrap: "break-word",
+  }}
+>
+  {message.text}
+</div>
+```
+
+## Sending Messages
+
+### Text Input
+
+1. Type your message in the input field
+2. Press **Enter** or click the **Send** button
+3. Your message appears immediately in the chat
+4. The input field clears automatically
+
+From `src/components/ui/dashimain.tsx:303-308`:
+
+```typescript
+const handleChatSubmit = async (e: React.FormEvent) => {
+  e.preventDefault();
+  if (chatInput.trim()) {
+    const newMessage = { text: chatInput.trim(), isUser: true };
+    setChatMessages((prev) => [...prev, newMessage]);
+    setChatInput("");
+```
+
+### Voice Input in Chat Mode
+
+You can also use voice while in chat mode:
+
+1. Hold **Cmd+Opt+V** to record
+2. Release to transcribe
+3. The transcription automatically appears as a user message
+4. Visual feedback: gradient glow around the message area
+
+From `src/components/ui/dashimain.tsx:477-489`:
+
+```typescript
+<div
+  style={{
+    background:
+      isRecording && isActivatedState
+        ? "linear-gradient(120deg, #D500D8 0%, #8CEBE5 100%)"
+        : "transparent",
+    boxShadow:
+      isRecording && isActivatedState
+        ? "0 0 24px 4px #D500D880, 0 0 32px 8px #8CEBE580"
+        : "none",
+  }}
+>
+```
+
+<Tip>
+When recording in chat mode, the message container gets a beautiful gradient border and glow effect to show you're actively recording.
+</Tip>
+
+## Streaming Responses
+
+Dashi responses stream in real-time, creating a natural conversation flow:
+
+1. An empty message bubble appears immediately
+2. Text streams in character by character
+3. The message updates in place as chunks arrive
+
+From `src/components/ui/dashimain.tsx:312-329`:
+
+```typescript
+const dashiResponseStream = await generate_response(chatInput);
+setChatMessages((prev) => [...prev, { text: "", isUser: false }]);
+
+for await (const chunk of dashiResponseStream) {
+  if (chunk.content && chunk.content !== "undefined") {
+    setChatMessages((prev) => {
+      const updated = [...prev];
+      if (updated.length > 0) {
+        updated[updated.length - 1] = {
+          ...updated[updated.length - 1],
+          text: (updated[updated.length - 1].text || "") + chunk.content,
+        };
+      }
+      return updated;
+    });
+  }
+}
+```
+
+## Message History
+
+During your session:
+- All messages persist in the chat history
+- Scroll to view previous messages
+- Messages clear when you press **ESC** to reset Dashi
+
+## Resetting Chat
+
+Press **ESC** to reset Dashi to default mode:
+- Chat interface fades out
+- All message history clears
+- Dashi returns to idle state
+- Black box shrinks back to 100px × 100px
+
+From `src/components/ui/dashimain.tsx:130-145`:
+
+```typescript
+const handleReset = () => {
+  setIsResetting(true);
+  setPositionsSetToDefault(false);
+  
+  setTimeout(() => {
+    setIsActivated(false);
+    setIsExpanded(false);
+    setIsActivatedState(false);
+    setHasMovedLeft(false);
+    setVoiceResponse("");
+    setIsGeneratingVoiceResponse(false);
+    setPositionsSetToDefault(true);
+    setIsResetting(false);
+  }, 800); // Match fade out duration
+};
+```
+
+<Warning>
+Resetting Dashi will clear all message history. There is no undo function.
+</Warning>
+
+## Animation Details
+
+### Fade In/Out
+
+- **Duration**: 0.8 seconds
+- **Easing**: easeInOut
+- **Opacity**: 0 (hidden) to 1 (visible)
+
+### Position Transitions
+
+- **Duration**: 0.5 seconds  
+- **Easing**: easeInOut
+- **Transform**: Smooth movement to center position
+
+From `src/components/ui/dashimain.tsx:453-456`:
+
+```typescript
+initial={{ opacity: 0 }}
+animate={{ opacity: isResetting ? 0 : 1 }}
+exit={{ opacity: 0 }}
+transition={{ duration: 0.8, ease: "easeInOut" }}
+```
+
+## State Management
+
+The chat interface uses these key state variables:
+
+- `chatInput`: Current input field value
+- `chatMessages`: Array of message objects with `text` and `isUser` properties
+- `isActivatedState`: Boolean indicating chat mode is active
+- `isResetting`: Boolean for fade out animation
+
+## Integration with AI
+
+Chat messages are processed by the Letta AI agent via `src/lib/letta.ts:9-20`:
+
+```typescript
+export const generate_response = async (input: string) => {
+  const stream = await letta_client.agents.messages.createStream(agent_id, {
+    messages: [
+      {
+        role: "user",
+        content: input,
+      },
+    ],
+    streamTokens: true,
+  });
+  return stream;
+};
+```
+
+## Dependencies
+
+- `framer-motion` - Animations and transitions
+- `@letta-ai/letta-client` - AI response generation
+- React state hooks - Message and UI state management

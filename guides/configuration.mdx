@@ -1,0 +1,234 @@
+---
+title: Configuration
+description: Configure Dashi's core settings, Tauri application, and environment variables
+---
+
+Dashi's configuration is split across multiple files depending on what you're customizing. This guide covers the main configuration options.
+
+## Tauri Configuration
+
+The Tauri application is configured in `src-tauri/tauri.conf.json`.
+
+### Basic Settings
+
+```json
+{
+  "productName": "dashi",
+  "version": "0.1.0",
+  "identifier": "com.tauri.dev",
+  "build": {
+    "frontendDist": "../out",
+    "devUrl": "http://localhost:3000",
+    "beforeDevCommand": "bun dev",
+    "beforeBuildCommand": "bun build"
+  }
+}
+```
+
+**Key Options:**
+- `productName` - The application display name
+- `version` - Application version number
+- `identifier` - Unique bundle identifier
+- `devUrl` - Development server URL (Next.js runs on port 3000)
+- `beforeDevCommand` - Command to start the dev server
+- `beforeBuildCommand` - Command to build the frontend
+
+### Window Configuration
+
+Customize the application window:
+
+```json
+{
+  "app": {
+    "windows": [
+      {
+        "title": "dashi",
+        "width": 800,
+        "height": 600,
+        "resizable": true,
+        "fullscreen": false
+      }
+    ]
+  }
+}
+```
+
+**Window Options:**
+- `title` - Window title bar text
+- `width` / `height` - Default window dimensions (in pixels)
+- `resizable` - Allow window resizing
+- `fullscreen` - Start in fullscreen mode
+
+### Security Settings
+
+Content Security Policy (CSP) configuration:
+
+```json
+{
+  "app": {
+    "security": {
+      "csp": "default-src 'self' blob: data: media:; script-src 'self' 'unsafe-eval';"
+    }
+  }
+}
+```
+
+<Warning>
+  The `unsafe-eval` directive is required for Next.js to work properly. Avoid removing it unless you know what you're doing.
+</Warning>
+
+### Bundle Configuration
+
+```json
+{
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ]
+  }
+}
+```
+
+- `targets` - Set to `"all"` to build for all platforms, or specify platforms like `["deb", "dmg", "msi"]`
+- `icon` - Array of icon files for different platforms
+
+## Dependencies
+
+### Frontend Dependencies
+
+Dashi uses these key frontend packages (from `package.json`):
+
+```json
+{
+  "dependencies": {
+    "@copilotkit/react-core": "^1.9.1",
+    "@copilotkit/react-ui": "^1.9.1",
+    "@letta-ai/letta-client": "^0.1.132",
+    "framer-motion": "^12.18.1",
+    "lottie-react": "^2.4.1",
+    "next": "15.3.4",
+    "react": "^19.0.0",
+    "use-mcp": "^0.0.9"
+  }
+}
+```
+
+**Key Packages:**
+- `@letta-ai/letta-client` - Letta AI backend client
+- `@copilotkit/react-core` & `@copilotkit/react-ui` - CopilotKit for AI features
+- `use-mcp` - MCP server integration
+- `framer-motion` - Animation library
+- `lottie-react` - Lottie animation support
+
+### Rust Dependencies
+
+Backend Rust crates (from `Cargo.toml`):
+
+```toml
+[dependencies]
+serde_json = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+log = "0.4"
+tauri = { version = "2.5.0", features = [] }
+tauri-plugin-log = "2.0.0-rc"
+hound = "3.5.1"
+tokio = "1.45.1"
+once_cell = "1.21.3"
+groq_api_rust = { path = "./groq_rs" }
+dotenv = "0.15.0"
+```
+
+**Key Crates:**
+- `tauri` - Desktop application framework
+- `hound` - Audio processing
+- `groq_api_rust` - Groq API integration for voice transcription
+- `tokio` - Async runtime
+- `dotenv` - Environment variable loading
+
+## Environment Variables
+
+Create a `.env` file in your project root for sensitive configuration:
+
+```bash
+# Groq API for voice transcription
+GROQ_API_KEY=your_groq_api_key_here
+
+# Optional: Custom Letta server URL
+LETTA_BASE_URL=http://localhost:8283
+```
+
+<Accordion title="Where to get API keys">
+  - **Groq API Key**: Sign up at [groq.com](https://groq.com) and create an API key in your dashboard
+  - **Letta Server**: Run your own Letta server locally (see [Letta Setup](/guides/letta-setup))
+</Accordion>
+
+## Next.js Configuration
+
+Dashi uses Next.js 15 with Turbopack. The build scripts in `package.json`:
+
+```json
+{
+  "scripts": {
+    "dev": "next dev --turbopack",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint"
+  }
+}
+```
+
+- `dev` - Start development server with Turbopack (faster builds)
+- `build` - Production build
+- `start` - Start production server
+- `lint` - Run ESLint
+
+## Common Configuration Tasks
+
+<AccordionGroup>
+  <Accordion title="Change default window size">
+    Edit `src-tauri/tauri.conf.json`:
+    ```json
+    {
+      "app": {
+        "windows": [{
+          "width": 1200,
+          "height": 800
+        }]
+      }
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Add custom fonts or assets">
+    Place assets in the `public/` directory in your Next.js project. They'll be accessible at `/your-asset.ext`.
+  </Accordion>
+
+  <Accordion title="Change app identifier for distribution">
+    Update the `identifier` field in `tauri.conf.json` to your own reverse-domain identifier:
+    ```json
+    {
+      "identifier": "com.yourcompany.dashi"
+    }
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## See Also
+
+<CardGroup cols={2}>
+  <Card title="Letta Setup" icon="brain" href="/guides/letta-setup">
+    Configure the Letta AI backend
+  </Card>
+  <Card title="MCP Servers" icon="server" href="/guides/mcp-servers">
+    Set up MCP server integration
+  </Card>
+  <Card title="Customization" icon="palette" href="/guides/customization">
+    Customize UI and animations
+  </Card>
+</CardGroup>

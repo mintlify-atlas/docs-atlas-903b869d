@@ -1,0 +1,420 @@
+---
+title: Customization
+description: Customize Dashi's UI, animations, colors, and behavior to match your needs
+---
+
+Dashi's interface is highly customizable. This guide covers how to modify the UI, animations, and interaction behavior.
+
+## Component Overview
+
+The main UI component is `AnimatedVectorBox` located in `src/components/ui/dashimain.tsx`. This component controls:
+- Dashi's appearance and animations
+- Voice and chat interactions
+- Color schemes and gradients
+- Window behavior
+
+## Customization Props
+
+The `AnimatedVectorBox` component accepts these props:
+
+```typescript
+interface AnimatedVectorBoxProps {
+  width?: number;          // Initial width (default: 100)
+  height?: number;         // Initial height (default: 100)
+  vectorPath?: string;     // Custom SVG path for Dashi
+  vectorPaths?: string[];  // Multiple SVG paths for Dashi
+  vectorColor?: string;    // Vector color (deprecated, uses gradient)
+  boxColor?: string;       // Background box color (default: "black")
+  borderRadius?: number;   // Border radius in px (default: 16)
+  leftMargin?: number;     // Left margin in px (default: 20)
+}
+```
+
+### Example Usage
+
+```tsx
+import AnimatedVectorBox from "@/components/ui/dashimain";
+
+export default function CustomDashi() {
+  return (
+    <AnimatedVectorBox
+      width={120}
+      height={120}
+      boxColor="#1a1a1a"
+      borderRadius={20}
+      leftMargin={40}
+    />
+  );
+}
+```
+
+## Color Customization
+
+### Gradient Colors
+
+Dashi uses a gradient from magenta to cyan. To change it, edit the gradient definition in `dashimain.tsx`:
+
+```tsx
+<linearGradient
+  id="vectorGradient"
+  x1="0%"
+  y1="0%"
+  x2="0%"
+  y2="100%"
+>
+  <stop offset="0%" stopColor="#D500D8" /> {/* Top color (magenta) */}
+  <stop offset="100%" stopColor="#8CEBE5" /> {/* Bottom color (cyan) */}
+</linearGradient>
+```
+
+**Example color schemes:**
+
+<AccordionGroup>
+  <Accordion title="Blue to Purple">
+    ```tsx
+    <stop offset="0%" stopColor="#667eea" />
+    <stop offset="100%" stopColor="#764ba2" />
+    ```
+  </Accordion>
+  
+  <Accordion title="Orange to Pink">
+    ```tsx
+    <stop offset="0%" stopColor="#f093fb" />
+    <stop offset="100%" stopColor="#f5576c" />
+    ```
+  </Accordion>
+  
+  <Accordion title="Green to Teal">
+    ```tsx
+    <stop offset="0%" stopColor="#11998e" />
+    <stop offset="100%" stopColor="#38ef7d" />
+    ```
+  </Accordion>
+</AccordionGroup>
+
+### Chat Message Colors
+
+Customize chat bubble colors in the chat interface section:
+
+```tsx
+<div
+  style={{
+    backgroundColor: message.isUser ? "#8CEBE5" : "#D500D8",
+    color: message.isUser ? "#000" : "#fff",
+  }}
+>
+  {message.text}
+</div>
+```
+
+### Voice Response Color
+
+Change the voice response text color:
+
+```tsx
+style={{
+  color: "#8CEBE5", // Change this to your preferred color
+}}
+```
+
+## Animation Customization
+
+### Initial Animation
+
+Dashi shows a Lottie animation on startup. Replace it with your own:
+
+<Steps>
+  <Step title="Create or find a Lottie animation">
+    Get a Lottie JSON file from [LottieFiles](https://lottiefiles.com).
+  </Step>
+  
+  <Step title="Add to project">
+    Place your animation file in `public/`, e.g., `public/my-animation.json`.
+  </Step>
+  
+  <Step title="Update the import">
+    ```tsx
+    import myAnimation from "../../../public/my-animation.json";
+    
+    // Then use it:
+    <Lottie
+      animationData={myAnimation}
+      loop={false}
+      onComplete={() => setIsJsonAnimationComplete(true)}
+    />
+    ```
+  </Step>
+</Steps>
+
+### Animation Timing
+
+Control animation durations and delays:
+
+```tsx
+// Initial animation duration
+const timer = setTimeout(() => {
+  setIsInitialAnimation(false);
+}, 3000); // Change to adjust timing (in milliseconds)
+
+// Fade transition duration
+transition={{
+  duration: 0.5, // Fade duration in seconds
+  ease: "easeInOut",
+}}
+```
+
+### Music Note Animations
+
+Customize the animated music notes that appear during voice recording:
+
+```tsx
+// Animation cycle interval
+useEffect(() => {
+  const interval = setInterval(() => {
+    cycle1();
+    cycle2();
+  }, 1000); // Change interval (1000ms = 1 second)
+  return () => clearInterval(interval);
+}, [cycle1, cycle2]);
+```
+
+## Keyboard Shortcuts
+
+Dashi uses keyboard shortcuts for interactions. Customize them in the `handleKeyDown` function:
+
+```tsx
+// Default shortcuts:
+// - Command+Option+T: Chat mode
+// - Command+Option+V: Voice mode
+// - ESC: Reset to default
+
+// Example: Change chat mode shortcut to Command+Shift+C
+if ((event.metaKey || event.ctrlKey) && event.shiftKey && 
+    (event.key === "c" || event.key === "C")) {
+  console.log("Custom shortcut detected!");
+  setIsActivatedState(true);
+}
+```
+
+<Warning>
+  Be careful not to conflict with system or browser shortcuts. Test your custom shortcuts thoroughly.
+</Warning>
+
+## Window Behavior
+
+### Size Transitions
+
+Customize how Dashi expands and contracts:
+
+```tsx
+// Voice mode expansion width
+const currentWidth = isActivatedState ? 100 : isExpanded ? 300 : 100;
+// Change '300' to your desired expanded width
+
+// Chat mode dimensions
+const currentHeight = isActivatedState ? 600 : height;
+// Change '600' to your desired chat height
+```
+
+### Opacity States
+
+Adjust opacity for different states:
+
+```tsx
+opacity: isResetting
+  ? 0
+  : isInitialAnimation
+  ? 0.3  // Initial animation opacity
+  : isActivated
+  ? 0.3  // Activated opacity
+  : 0.1  // Default idle opacity
+```
+
+## Custom SVG Vectors
+
+Replace Dashi's appearance with custom SVG paths:
+
+```tsx
+const customVectorPaths = [
+  "M10,10 L90,10 L90,90 L10,90 Z",  // Square
+  "M50,10 L90,50 L50,90 L10,50 Z",  // Diamond
+];
+
+<AnimatedVectorBox
+  vectorPaths={customVectorPaths}
+/>
+```
+
+Or use a single path:
+
+```tsx
+<AnimatedVectorBox
+  vectorPath="M50 10 L90 90 L10 90 Z"  // Triangle
+/>
+```
+
+## Framer Motion Configuration
+
+Dashi uses Framer Motion for animations. Key configurations:
+
+### Easing Functions
+
+```tsx
+transition={{
+  ease: "easeInOut",  // Options: "easeIn", "easeOut", "easeInOut", "linear"
+  duration: 0.5,
+}}
+```
+
+### Spring Animations
+
+For more natural motion:
+
+```tsx
+transition={{
+  type: "spring",
+  stiffness: 100,
+  damping: 15,
+}}
+```
+
+## Tailwind CSS Customization
+
+Dashi uses Tailwind CSS v4. Customize in `tailwind.config.js` or with inline styles:
+
+```tsx
+// Inline Tailwind classes
+<div className="bg-gradient-to-r from-purple-500 to-cyan-400 rounded-2xl p-4">
+  {/* Your content */}
+</div>
+```
+
+## Voice Recording UI
+
+Customize the recording indicator:
+
+```tsx
+// Add glow effect during recording
+boxShadow: isRecording
+  ? "0 0 24px 4px #D500D880, 0 0 32px 8px #8CEBE580"
+  : "none",
+
+// Change border during recording
+border: isRecording
+  ? "3px solid #D500D8"
+  : "none",
+```
+
+## Advanced Customization Examples
+
+<AccordionGroup>
+  <Accordion title="Add a custom loading state">
+    ```tsx
+    const [isLoading, setIsLoading] = useState(false);
+    
+    // Show loading spinner
+    {isLoading && (
+      <motion.div
+        animate={{ rotate: 360 }}
+        transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+      >
+        <LoadingIcon />
+      </motion.div>
+    )}
+    ```
+  </Accordion>
+  
+  <Accordion title="Add sound effects">
+    ```tsx
+    import useSound from 'use-sound';
+    
+    const [playClick] = useSound('/sounds/click.mp3');
+    
+    const handleFirstClick = () => {
+      playClick();
+      setIsActivated(true);
+    };
+    ```
+  </Accordion>
+  
+  <Accordion title="Custom positioning logic">
+    ```tsx
+    // Position based on screen size
+    const getPosition = () => {
+      if (window.innerWidth < 768) {
+        return { left: "10px", top: "50%" };
+      }
+      return { left: "50%", top: "50%" };
+    };
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Dependencies for Customization
+
+Relevant packages you can leverage:
+
+```json title="package.json"
+{
+  "dependencies": {
+    "framer-motion": "^12.18.1",      // Animations
+    "lottie-react": "^2.4.1",         // Lottie animations
+    "lucide-react": "^0.522.0",       // Icons
+    "tailwind-merge": "^3.3.1",       // Tailwind utilities
+    "class-variance-authority": "^0.7.1" // Component variants
+  }
+}
+```
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Test on multiple screen sizes">
+    Use responsive design and test:
+    - Mobile (< 768px)
+    - Tablet (768px - 1024px)
+    - Desktop (> 1024px)
+  </Accordion>
+  
+  <Accordion title="Performance considerations">
+    - Keep animations under 60fps
+    - Avoid animating expensive properties (use `transform` and `opacity`)
+    - Debounce rapid state changes
+    - Use `will-change` CSS property sparingly
+  </Accordion>
+  
+  <Accordion title="Accessibility">
+    - Ensure sufficient color contrast
+    - Provide keyboard navigation
+    - Add ARIA labels for screen readers
+    - Respect `prefers-reduced-motion`
+  </Accordion>
+</AccordionGroup>
+
+## Resources
+
+<CardGroup cols={2}>
+  <Card title="Framer Motion" icon="bolt" href="https://www.framer.com/motion/">
+    Animation library documentation
+  </Card>
+  <Card title="Lottie Files" icon="film" href="https://lottiefiles.com">
+    Free Lottie animations
+  </Card>
+  <Card title="Tailwind CSS" icon="palette" href="https://tailwindcss.com">
+    Utility-first CSS framework
+  </Card>
+  <Card title="Lucide Icons" icon="shapes" href="https://lucide.dev">
+    Icon library
+  </Card>
+</CardGroup>
+
+## See Also
+
+<CardGroup cols={2}>
+  <Card title="Configuration" icon="gear" href="/guides/configuration">
+    Configure Dashi settings
+  </Card>
+  <Card title="Letta Setup" icon="brain" href="/guides/letta-setup">
+    Set up the AI backend
+  </Card>
+</CardGroup>

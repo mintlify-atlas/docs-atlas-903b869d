@@ -1,0 +1,564 @@
+---
+title: Component Structure
+description: Explore Dashi's React component architecture, state management patterns, and how the animated UI components work together.
+---
+
+## Overview
+
+Dashi's frontend is built with React 19 and Next.js 15, using a component-based architecture with TypeScript for type safety. The UI features smooth animations powered by Framer Motion and a modular component structure.
+
+## Component Hierarchy
+
+```
+App (layout.tsx)
+└── CopilotKit Provider
+    └── Home (page.tsx)
+        └── AnimatedVectorBox (dashimain.tsx)
+            ├── Dashi Avatar (SVG)
+            ├── Music Notes Animation
+            ├── Chat Interface
+            └── Voice Response Display
+```
+
+## Core Components
+
+### 1. Root Layout (`src/app/layout.tsx`)
+
+The root layout wraps the entire application with providers and global styles:
+
+```typescript
+import { CopilotKit } from "@copilotkit/react-core";
+import { Geist, Geist_Mono } from "next/font/google";
+
+export default function RootLayout({ children }) {
+  return (
+    <html lang="en">
+      <body className={`${geistSans.variable} ${geistMono.variable}`}>
+        <CopilotKit publicApiKey="...">
+          {children}
+        </CopilotKit>
+      </body>
+    </html>
+  );
+}
+```
+
+**Responsibilities:**
+- Load custom fonts (Geist Sans and Geist Mono)
+- Wrap app with CopilotKit for AI features
+- Apply global CSS styles
+- Set metadata (title, description)
+
+### 2. Home Page (`src/app/page.tsx`)
+
+The main page that renders Dashi:
+
+```typescript
+"use client";
+
+import AnimatedVectorBox from "@/components/ui/dashimain";
+import { useState } from "react";
+
+export default function Home() {
+  const [boxWidth, setBoxWidth] = useState(100);
+
+  const vectorPaths = [
+    // SVG paths for Dashi's face (smile, eyes, head)
+  ];
+
+  return (
+    <main className="flex min-h-screen items-start justify-center p-4"
+          style={{ backgroundImage: "url(/darkmodemonterey.jpg)" }}>
+      <div style={{ marginTop: "50px" }}>
+        <AnimatedVectorBox width={boxWidth} vectorPaths={vectorPaths} />
+      </div>
+    </main>
+  );
+}
+```
+
+**Key Features:**
+- Client-side rendered ("use client" directive)
+- Background image styling
+- Passes SVG paths to Dashi component
+- Manages box width state
+
+### 3. AnimatedVectorBox (`src/components/ui/dashimain.tsx`)
+
+The main component that renders Dashi with all interactive features. This is a 976-line component handling:
+
+<CardGroup cols={2}>
+  <Card title="Animation States" icon="wand-magic-sparkles">
+    Initial animation, idle state, voice mode, and chat mode
+  </Card>
+  <Card title="Voice Recording" icon="microphone">
+    Capture audio, process, and send to backend for transcription
+  </Card>
+  <Card title="Chat Interface" icon="messages">
+    Full chat UI with message history and streaming responses
+  </Card>
+  <Card title="Keyboard Shortcuts" icon="keyboard">
+    Cmd+Opt+V for voice, Cmd+Opt+T for chat, ESC to reset
+  </Card>
+</CardGroup>
+
+#### Component Props
+
+```typescript
+interface AnimatedVectorBoxProps {
+  width?: number;              // Box width (default: 100)
+  height?: number;             // Box height (default: 100)
+  vectorPath?: string;         // Single SVG path
+  vectorPaths?: string[];      // Multiple SVG paths for Dashi's face
+  vectorColor?: string;        // Vector fill color
+  boxColor?: string;           // Background color (default: "black")
+  borderRadius?: number;       // Corner radius (default: 16)
+  leftMargin?: number;         // Left offset (default: 20)
+}
+```
+
+#### State Management
+
+The component uses multiple React hooks for state:
+
+```typescript
+// Animation states
+const [isActivated, setIsActivated] = useState(false);
+const [isExpanded, setIsExpanded] = useState(false);
+const [isActivatedState, setIsActivatedState] = useState(false);
+const [isInitialAnimation, setIsInitialAnimation] = useState(true);
+
+// Position tracking
+const [hasMovedLeft, setHasMovedLeft] = useState(false);
+const [positionsSetToDefault, setPositionsSetToDefault] = useState(false);
+
+// Chat interface
+const [chatInput, setChatInput] = useState("");
+const [chatMessages, setChatMessages] = useState<
+  Array<{ text: string; isUser: boolean }>
+>([]);
+
+// Voice recording
+const [transcription, setTranscription] = useState<string | null>(null);
+const [voiceResponse, setVoiceResponse] = useState<string>("");
+const [isGeneratingVoiceResponse, setIsGeneratingVoiceResponse] = useState(false);
+
+// Reset handling
+const [isResetting, setIsResetting] = useState(false);
+
+// Animation cycles
+const [anim1, cycle1] = useCycle(
+  { d: path1, fill: "#8CEBE5" },
+  { d: scalePath(path1, 1.2), fill: "#D500D8" }
+);
+```
+
+#### Animation System
+
+Dashi uses Framer Motion for smooth transitions:
+
+**1. Initial Animation Sequence:**
+```typescript
+useEffect(() => {
+  const timer = setTimeout(() => {
+    setIsInitialAnimation(false);
+  }, 3000); // 3-second intro animation
+  return () => clearTimeout(timer);
+}, []);
+```
+
+**2. Cycling Music Notes:**
+```typescript
+useEffect(() => {
+  const interval = setInterval(() => {
+    cycle1(); // Cycle note 1
+    cycle2(); // Cycle note 2
+  }, 1000); // Every second
+  return () => clearInterval(interval);
+}, [cycle1, cycle2]);
+```
+
+**3. Dynamic Width Calculation:**
+```typescript
+const getVoiceResponseWidth = () => {
+  if (isActivatedState) return 100; // Fixed in chat mode
+  if (!voiceResponse) return currentWidth;
+
+  // Calculate based on text length
+  const baseWidth = 280; // Dashi + gap + min text
+  const estimatedTextWidth = Math.min(
+    voiceResponse.length * 8,
+    window.innerWidth * 0.5 - baseWidth
+  );
+  return Math.max(baseWidth + estimatedTextWidth, currentWidth);
+};
+```
+
+#### Keyboard Event Handling
+
+The component listens for keyboard shortcuts:
+
+```typescript
+useEffect(() => {
+  const handleKeyDown = async (event: KeyboardEvent) => {
+    // ESC - Reset to default
+    if (event.key === "Escape") {
+      handleReset();
+      return;
+    }
+
+    // Cmd+Opt+T - Chat mode
+    if ((event.metaKey || event.ctrlKey) && event.altKey && isTKey) {
+      setIsActivatedState(true);
+      setIsExpanded(false);
+    }
+
+    // Cmd+Opt+V - Voice mode
+    if ((event.metaKey || event.ctrlKey) && event.altKey && isVKey) {
+      setIsExpanded(true);
+      await startRecording();
+    }
+  };
+
+  const handleKeyUp = async (event: KeyboardEvent) => {
+    // Release Cmd+Opt+V - Stop recording
+    if ((event.metaKey || event.ctrlKey) && event.altKey && isVKey) {
+      const result = await stopAndTranscribe();
+      // Generate AI response
+      const stream = await generate_response(result);
+      // Update chat with streaming response
+    }
+  };
+
+  document.addEventListener("keydown", handleKeyDown, true);
+  document.addEventListener("keyup", handleKeyUp, true);
+  return () => {
+    document.removeEventListener("keydown", handleKeyDown, true);
+    document.removeEventListener("keyup", handleKeyUp, true);
+  };
+}, [isActivated, isExpanded, isActivatedState, isRecording]);
+```
+
+#### Chat Interface Rendering
+
+When in chat mode (`isActivatedState === true`):
+
+```typescript
+{isActivatedState && (
+  <motion.div
+    initial={{ opacity: 0 }}
+    animate={{ opacity: isResetting ? 0 : 1 }}
+    style={{ width: "400px", height: "600px" }}>
+    {/* Chat messages area */}
+    <div style={{ height: "420px", overflowY: "auto" }}>
+      {chatMessages.map((message, index) => (
+        <div key={index} style={{ textAlign: message.isUser ? "right" : "left" }}>
+          <div style={{
+            backgroundColor: message.isUser ? "#8CEBE5" : "#D500D8",
+            color: message.isUser ? "#000" : "#fff"
+          }}>
+            {message.text}
+          </div>
+        </div>
+      ))}
+    </div>
+
+    {/* Chat input form */}
+    <form onSubmit={handleChatSubmit}>
+      <input
+        value={chatInput}
+        onChange={(e) => setChatInput(e.target.value)}
+        placeholder="Type your message..."
+      />
+      <button type="submit">Send</button>
+    </form>
+  </motion.div>
+)}
+```
+
+#### Voice Response Display
+
+When voice response is being generated:
+
+```typescript
+{(voiceResponse || isGeneratingVoiceResponse) && !isActivatedState && (
+  <div style={{ display: "flex", alignItems: "center" }}>
+    {/* Dashi avatar on left */}
+    <motion.div style={{ width: "60px", height: "60px" }}>
+      <svg viewBox="0 0 100 100">
+        {vectorPaths.map((path, index) => (
+          <motion.path key={index} d={path} fill="url(#vectorGradient)" />
+        ))}
+      </svg>
+    </motion.div>
+
+    {/* Voice response text */}
+    <motion.div style={{ marginLeft: 24, color: "#8CEBE5" }}>
+      {isGeneratingVoiceResponse && !voiceResponse
+        ? "Generating response..."
+        : voiceResponse}
+    </motion.div>
+  </div>
+)}
+```
+
+## Custom Hooks
+
+### useVoiceRecorder (`src/lib/tts.ts`)
+
+Manages audio recording and transcription:
+
+```typescript
+export function useVoiceRecorder(): UseVoiceRecorderResult {
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const [isRecording, setIsRecording] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const startRecording = useCallback(async () => {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    const mediaRecorder = new MediaRecorder(stream, { mimeType: "audio/webm" });
+    
+    audioChunksRef.current = [];
+    mediaRecorder.addEventListener("dataavailable", (event) => {
+      audioChunksRef.current.push(event.data);
+    });
+    
+    mediaRecorderRef.current = mediaRecorder;
+    mediaRecorder.start();
+    setIsRecording(true);
+  }, []);
+
+  const stopAndTranscribe = useCallback(async (): Promise<string | null> => {
+    return new Promise((resolve, reject) => {
+      mediaRecorderRef.current!.addEventListener("stop", async () => {
+        // Create audio blob
+        const audioBlob = new Blob(audioChunksRef.current);
+        
+        // Convert to PCM format
+        const audioContext = new AudioContext({ sampleRate: 16000 });
+        const arrayBuffer = await audioBlob.arrayBuffer();
+        const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+        const pcmData = audioBuffer.getChannelData(0);
+        const audioSamples = Array.from(pcmData);
+        
+        // Send to Tauri backend
+        const transcription = await invoke<string>("transcribe", {
+          audio: audioSamples,
+        });
+        
+        resolve(transcription);
+      }, { once: true });
+      
+      mediaRecorderRef.current!.stop();
+    });
+  }, []);
+
+  return { isRecording, error, startRecording, stopAndTranscribe };
+}
+```
+
+**Key Features:**
+- Uses `MediaRecorder` API to capture microphone audio
+- Converts WebM audio to PCM format at 16kHz
+- Invokes Tauri backend via `invoke()` for transcription
+- Returns transcribed text as a string
+
+## UI Component Library
+
+Dashi uses Radix UI primitives with custom styling:
+
+### Button Component (`src/components/ui/button.tsx`)
+
+```typescript
+import * as React from "react";
+import { Slot } from "@radix-ui/react-slot";
+import { cva, type VariantProps } from "class-variance-authority";
+
+const buttonVariants = cva(
+  "inline-flex items-center justify-center rounded-md transition-colors",
+  {
+    variants: {
+      variant: {
+        default: "bg-primary text-primary-foreground hover:bg-primary/90",
+        outline: "border border-input hover:bg-accent",
+      },
+      size: {
+        default: "h-10 px-4 py-2",
+        sm: "h-9 px-3",
+        lg: "h-11 px-8",
+      },
+    },
+    defaultVariants: {
+      variant: "default",
+      size: "default",
+    },
+  }
+);
+
+export interface ButtonProps
+  extends React.ButtonHTMLAttributes<HTMLButtonElement>,
+    VariantProps<typeof buttonVariants> {
+  asChild?: boolean;
+}
+
+const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
+  ({ className, variant, size, asChild = false, ...props }, ref) => {
+    const Comp = asChild ? Slot : "button";
+    return (
+      <Comp
+        className={cn(buttonVariants({ variant, size, className }))}
+        ref={ref}
+        {...props}
+      />
+    );
+  }
+);
+```
+
+### Card Component (`src/components/ui/card.tsx`)
+
+Reusable card component for layouts:
+
+```typescript
+const Card = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
+  ({ className, ...props }, ref) => (
+    <div
+      ref={ref}
+      className={cn(
+        "rounded-lg border bg-card text-card-foreground shadow-sm",
+        className
+      )}
+      {...props}
+    />
+  )
+);
+
+const CardHeader = ({ className, ...props }) => (
+  <div className={cn("flex flex-col space-y-1.5 p-6", className)} {...props} />
+);
+
+const CardTitle = ({ className, ...props }) => (
+  <h3 className={cn("text-2xl font-semibold leading-none", className)} {...props} />
+);
+
+const CardContent = ({ className, ...props }) => (
+  <div className={cn("p-6 pt-0", className)} {...props} />
+);
+```
+
+## Styling Approach
+
+<CardGroup cols={2}>
+  <Card title="Tailwind CSS" icon="palette">
+    Utility-first CSS for rapid UI development with responsive design
+  </Card>
+  <Card title="Inline Styles" icon="code">
+    Used for dynamic positioning and animation-related styles
+  </Card>
+  <Card title="CSS Variables" icon="sliders">
+    Custom properties for theming and consistent colors
+  </Card>
+  <Card title="Framer Motion" icon="wand-magic-sparkles">
+    Style objects for animated properties (opacity, position, scale)
+  </Card>
+</CardGroup>
+
+### Color System
+
+Dashi uses a vibrant gradient color scheme:
+
+```css
+/* Primary colors */
+--color-primary: #D500D8;    /* Magenta */
+--color-secondary: #8CEBE5;  /* Cyan */
+
+/* Gradients */
+linearGradient(
+  "120deg",
+  "#D500D8 0%",
+  "#8CEBE5 100%"
+)
+```
+
+## Component Communication
+
+### Parent to Child (Props)
+
+```typescript
+// Home page passes props to AnimatedVectorBox
+<AnimatedVectorBox
+  width={boxWidth}
+  vectorPaths={vectorPaths}
+  borderRadius={16}
+/>
+```
+
+### Child to Parent (Callbacks)
+
+```typescript
+// Not extensively used; most state is managed internally
+// in AnimatedVectorBox component
+```
+
+### Sibling Components (State Lifting)
+
+Since most functionality is in one component, sibling communication is minimal. Future refactoring could extract:
+- Chat interface to separate component
+- Voice response display to separate component
+- Music notes animation to separate component
+
+## File Organization
+
+```
+src/
+├── app/
+│   ├── layout.tsx              # Root layout with providers
+│   ├── page.tsx                # Home page
+│   └── globals.css             # Global styles
+├── components/
+│   ├── ui/
+│   │   ├── dashimain.tsx      # Main Dashi component (976 lines)
+│   │   ├── button.tsx          # Button primitive
+│   │   ├── card.tsx            # Card primitive
+│   │   ├── input.tsx           # Input primitive
+│   │   └── musicnotes.tsx      # Music notes animation
+│   └── Overlay.tsx             # Overlay component
+└── lib/
+    ├── tts.ts                  # Voice recording hook
+    ├── letta.ts                # Letta AI client
+    └── utils.ts                # Utility functions
+```
+
+## Component Refactoring Opportunities
+
+The `AnimatedVectorBox` component could be split into smaller components:
+
+<CardGroup cols={2}>
+  <Card title="DashiAvatar" icon="face-smile">
+    SVG rendering and gradient animation
+  </Card>
+  <Card title="ChatInterface" icon="messages">
+    Chat UI, message history, and input form
+  </Card>
+  <Card title="VoiceResponse" icon="microphone">
+    Voice response display with streaming text
+  </Card>
+  <Card title="MusicNotes" icon="music">
+    Animated music note SVGs
+  </Card>
+</CardGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Architecture" href="/development/architecture" icon="sitemap">
+    Learn about the overall system architecture
+  </Card>
+  <Card title="Tauri Backend" href="/development/tauri-backend" icon="rust">
+    Explore the Rust backend implementation
+  </Card>
+  <Card title="Contributing" href="/development/contributing" icon="git-branch">
+    Start contributing to Dashi development
+  </Card>
+</CardGroup>

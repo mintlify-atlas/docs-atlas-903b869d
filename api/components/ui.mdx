@@ -1,0 +1,302 @@
+---
+title: UI Components
+description: Core UI components including Button, Card, and Input with shadcn/ui styling.
+---
+
+Dashi includes a set of core UI components built with Radix UI and styled using class-variance-authority (CVA).
+
+## Button
+
+A flexible button component with multiple variants and sizes.
+
+### Import
+
+```tsx
+import { Button } from "@/components/ui/button";
+```
+
+### Interface
+
+```typescript
+type ButtonProps = React.ComponentProps<"button"> & 
+  VariantProps<typeof buttonVariants> & {
+    asChild?: boolean;
+  };
+```
+
+### Props
+
+<ParamField path="variant" type="string" default='"default"'>
+  Button style variant.
+  
+  Options:
+  - `default`: Primary button with background and shadow
+  - `destructive`: Red destructive action button
+  - `outline`: Bordered button with transparent background
+  - `secondary`: Secondary button with muted styling
+  - `ghost`: Minimal button with no background
+  - `link`: Text link styled as button
+</ParamField>
+
+<ParamField path="size" type="string" default='"default"'>
+  Button size variant.
+  
+  Options:
+  - `default`: Height 9 (36px), padding x: 4, y: 2
+  - `sm`: Height 8 (32px), smaller padding
+  - `lg`: Height 10 (40px), padding x: 6
+  - `icon`: Square button, size 9x9 (36px)
+</ParamField>
+
+<ParamField path="asChild" type="boolean" default="false">
+  If true, renders as a Radix UI Slot component, allowing you to pass a custom element as a child.
+</ParamField>
+
+<ParamField path="className" type="string">
+  Additional CSS classes to apply to the button.
+</ParamField>
+
+### Usage
+
+```tsx
+import { Button } from "@/components/ui/button";
+
+// Default button
+<Button>Click me</Button>
+
+// Destructive variant
+<Button variant="destructive">Delete</Button>
+
+// Large outline button
+<Button variant="outline" size="lg">Cancel</Button>
+
+// Icon button
+<Button size="icon">
+  <svg>...</svg>
+</Button>
+
+// As child (render as link)
+<Button asChild>
+  <a href="/dashboard">Go to Dashboard</a>
+</Button>
+```
+
+### Styling Details
+
+All buttons include:
+
+- Focus-visible ring with 3px width
+- Disabled state with 50% opacity and no pointer events
+- SVG icon support with automatic sizing
+- Transition animations on all properties
+- Accessibility support with `aria-invalid` states
+- Shadow effects (shadow-xs)
+
+---
+
+## Card
+
+A flexible card component with header, content, and footer sections.
+
+### Import
+
+```tsx
+import {
+  Card,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+  CardAction,
+  CardContent,
+  CardFooter,
+} from "@/components/ui/card";
+```
+
+### Components
+
+#### Card
+
+Main card container.
+
+```typescript
+type CardProps = React.ComponentProps<"div">;
+```
+
+<ParamField path="className" type="string">
+  Additional CSS classes to apply.
+</ParamField>
+
+**Default styles**: `bg-card`, rounded-xl, border, py-6, shadow-sm, flex flex-col gap-6
+
+#### CardHeader
+
+Card header section with grid layout support.
+
+```typescript
+type CardHeaderProps = React.ComponentProps<"div">;
+```
+
+**Default styles**: Grid layout, auto-rows-min, gap-1.5, px-6, container queries enabled
+
+#### CardTitle
+
+Card title text.
+
+```typescript
+type CardTitleProps = React.ComponentProps<"div">;
+```
+
+**Default styles**: font-semibold, leading-none
+
+#### CardDescription
+
+Card description text.
+
+```typescript
+type CardDescriptionProps = React.ComponentProps<"div">;
+```
+
+**Default styles**: text-sm, text-muted-foreground
+
+#### CardAction
+
+Action buttons or controls positioned in the header.
+
+```typescript
+type CardActionProps = React.ComponentProps<"div">;
+```
+
+**Default styles**: Positioned at top-right of header (col-start-2, row-span-2)
+
+#### CardContent
+
+Main card content area.
+
+```typescript
+type CardContentProps = React.ComponentProps<"div">;
+```
+
+**Default styles**: px-6
+
+#### CardFooter
+
+Card footer section.
+
+```typescript
+type CardFooterProps = React.ComponentProps<"div">;
+```
+
+**Default styles**: flex, items-center, px-6
+
+### Usage
+
+```tsx
+import {
+  Card,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+  CardAction,
+  CardContent,
+  CardFooter,
+} from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+
+<Card>
+  <CardHeader>
+    <CardTitle>Settings</CardTitle>
+    <CardDescription>Manage your account settings</CardDescription>
+    <CardAction>
+      <Button variant="ghost" size="icon">⋮</Button>
+    </CardAction>
+  </CardHeader>
+  <CardContent>
+    <p>Your account details and preferences.</p>
+  </CardContent>
+  <CardFooter>
+    <Button>Save Changes</Button>
+  </CardFooter>
+</Card>
+```
+
+---
+
+## Input
+
+A styled input component with focus states and validation support.
+
+### Import
+
+```tsx
+import { Input } from "@/components/ui/input";
+```
+
+### Interface
+
+```typescript
+type InputProps = React.ComponentProps<"input">;
+```
+
+### Props
+
+<ParamField path="type" type="string">
+  HTML input type (text, email, password, etc.).
+</ParamField>
+
+<ParamField path="className" type="string">
+  Additional CSS classes to apply.
+</ParamField>
+
+All standard HTML input attributes are supported.
+
+### Usage
+
+```tsx
+import { Input } from "@/components/ui/input";
+
+// Text input
+<Input type="text" placeholder="Enter your name" />
+
+// Email input
+<Input type="email" placeholder="email@example.com" />
+
+// Password input
+<Input type="password" placeholder="••••••••" />
+
+// With custom styling
+<Input
+  type="text"
+  className="max-w-sm"
+  placeholder="Custom input"
+/>
+
+// Disabled state
+<Input type="text" disabled placeholder="Disabled input" />
+```
+
+### Styling Details
+
+The Input component includes:
+
+- Height: 9 (36px)
+- Border with `border-input` color
+- Rounded corners (rounded-md)
+- Focus ring with 3px width
+- Placeholder text with `text-muted-foreground`
+- Text selection with primary color background
+- File input support with styled file button
+- Invalid state styling with destructive ring
+- Disabled state with 50% opacity
+- Shadow effect (shadow-xs)
+- Dark mode support with `dark:bg-input/30`
+- Responsive text sizing (base on mobile, sm on desktop)
+
+### Focus States
+
+- **Default**: Transparent background with border
+- **Focus**: 3px ring with `ring-ring/50` color, border changes to `border-ring`
+- **Invalid**: Destructive red ring and border when `aria-invalid` is true
+
+## Utilities
+
+All components use the `cn` utility function from `@/lib/utils` for conditional class merging with Tailwind CSS.

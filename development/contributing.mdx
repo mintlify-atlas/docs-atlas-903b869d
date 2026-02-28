@@ -1,0 +1,606 @@
+---
+title: Contributing Guidelines
+description: Learn how to contribute to Dashi development, set up your environment, follow coding standards, and submit pull requests.
+---
+
+## Welcome Contributors
+
+Thank you for your interest in contributing to Dashi! This guide will help you get started with development, understand our coding standards, and submit your contributions.
+
+<CardGroup cols={2}>
+  <Card title="Code of Conduct" icon="handshake">
+    Be respectful, inclusive, and collaborative with all contributors
+  </Card>
+  <Card title="Open Source" icon="code-branch">
+    Dashi is open source - all contributions are welcome
+  </Card>
+  <Card title="Bug Reports" icon="bug">
+    Report bugs via GitHub Issues with detailed reproduction steps
+  </Card>
+  <Card title="Feature Requests" icon="lightbulb">
+    Suggest new features through GitHub Discussions
+  </Card>
+</CardGroup>
+
+## Getting Started
+
+### Prerequisites
+
+Before contributing, ensure you have:
+
+<CardGroup cols={2}>
+  <Card title="Node.js 20+" icon="node">
+    JavaScript runtime for Next.js development
+  </Card>
+  <Card title="Rust 1.77.2+" icon="rust">
+    Rust toolchain for Tauri backend
+  </Card>
+  <Card title="Git" icon="git-branch">
+    Version control for code management
+  </Card>
+  <Card title="Groq API Key" icon="key">
+    Required for speech-to-text transcription
+  </Card>
+</CardGroup>
+
+### Development Environment Setup
+
+#### 1. Clone the Repository
+
+```bash
+git clone https://github.com/yourusername/dashi.git
+cd dashi
+```
+
+#### 2. Install Node Dependencies
+
+```bash
+npm install
+# or
+yarn install
+# or
+pnpm install
+```
+
+#### 3. Install Rust and Tauri CLI
+
+```bash
+# Install Rust
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+
+# Install Tauri CLI
+cargo install tauri-cli
+```
+
+#### 4. Set Up Environment Variables
+
+Create a `.env` file in the root directory:
+
+```bash
+# .env
+GROQ_API_KEY=your_groq_api_key_here
+```
+
+<Warning>
+  Never commit your `.env` file or API keys to version control. The `.env` file should be listed in `.gitignore`.
+</Warning>
+
+#### 5. Start Letta AI Server (Optional)
+
+If you want to use the chat features:
+
+```bash
+# Install Letta
+pip install letta
+
+# Start Letta server
+letta server --port 8283
+```
+
+#### 6. Run Development Server
+
+```bash
+npm run dev
+```
+
+This will start:
+- Next.js dev server at `http://localhost:3000`
+- Tauri dev window with hot reload
+
+## Project Structure
+
+Understand the codebase organization:
+
+```
+dashi/
+├── src/                          # Next.js frontend
+│   ├── app/                      # App Router pages
+│   │   ├── layout.tsx           # Root layout
+│   │   └── page.tsx             # Home page
+│   ├── components/               # React components
+│   │   └── ui/
+│   │       └── dashimain.tsx    # Main Dashi component
+│   └── lib/                      # Utilities and hooks
+│       ├── tts.ts               # Voice recording
+│       └── letta.ts             # Letta AI client
+├── src-tauri/                    # Rust backend
+│   ├── src/
+│   │   ├── lib.rs               # Tauri setup
+│   │   └── audio.rs             # Audio processing
+│   └── Cargo.toml               # Rust dependencies
+├── public/                       # Static assets
+├── package.json                  # Node dependencies
+└── README.md                     # Project documentation
+```
+
+## Coding Standards
+
+### TypeScript/React
+
+#### File Naming
+
+- Components: `PascalCase.tsx` (e.g., `DashiMain.tsx`)
+- Hooks: `camelCase.ts` with `use` prefix (e.g., `useVoiceRecorder.ts`)
+- Utilities: `camelCase.ts` (e.g., `utils.ts`)
+
+#### Component Structure
+
+```typescript
+"use client"; // If using client-side features
+
+import { useState } from "react";
+
+// Props interface
+interface MyComponentProps {
+  title: string;
+  onAction?: () => void;
+}
+
+// Component with TypeScript
+export default function MyComponent({ title, onAction }: MyComponentProps) {
+  const [state, setState] = useState(false);
+
+  return (
+    <div>
+      <h1>{title}</h1>
+    </div>
+  );
+}
+```
+
+#### Hooks
+
+```typescript
+import { useState, useCallback } from "react";
+
+export function useCustomHook() {
+  const [value, setValue] = useState("");
+
+  const handleChange = useCallback((newValue: string) => {
+    setValue(newValue);
+  }, []);
+
+  return { value, handleChange };
+}
+```
+
+#### Styling
+
+- Use Tailwind CSS utility classes for styling
+- Use inline styles for dynamic/animated properties
+- Keep styles close to components (no separate CSS files unless necessary)
+
+```typescript
+<div className="flex items-center justify-center p-4">
+  <motion.div
+    style={{ width: currentWidth }}
+    animate={{ opacity: isVisible ? 1 : 0 }}
+  >
+    Content
+  </motion.div>
+</div>
+```
+
+### Rust
+
+#### File Organization
+
+- One module per file
+- Use `mod.rs` for module exports
+- Keep related functionality together
+
+#### Naming Conventions
+
+- Functions: `snake_case`
+- Types/Structs: `PascalCase`
+- Constants: `SCREAMING_SNAKE_CASE`
+- Modules: `snake_case`
+
+#### Code Style
+
+```rust
+use std::result::Result;
+
+// Constants
+const MAX_AUDIO_LENGTH: usize = 1_000_000;
+
+// Function documentation
+/// Processes audio samples and converts to WAV format.
+///
+/// # Arguments
+/// * `audio` - Vector of f32 audio samples
+///
+/// # Returns
+/// * `Result<Vec<u8>, String>` - WAV file bytes or error message
+#[tauri::command]
+pub fn process_audio(audio: Vec<f32>) -> Result<Vec<u8>, String> {
+    // Validate input
+    if audio.is_empty() {
+        return Err("Audio data is empty".to_string());
+    }
+
+    // Process audio
+    let wav_data = convert_to_wav(audio)?;
+    
+    Ok(wav_data)
+}
+```
+
+#### Error Handling
+
+```rust
+// Use Result type for operations that can fail
+fn fallible_operation() -> Result<String, String> {
+    let result = some_operation()
+        .map_err(|e| format!("Operation failed: {}", e))?;
+    
+    Ok(result)
+}
+
+// Log errors before returning
+match operation() {
+    Ok(value) => println!("Success: {}", value),
+    Err(e) => {
+        eprintln!("Error: {:?}", e);
+        return Err(e.to_string());
+    }
+}
+```
+
+## Making Changes
+
+### Workflow
+
+1. **Create a new branch:**
+
+```bash
+git checkout -b feature/my-new-feature
+# or
+git checkout -b fix/bug-description
+```
+
+2. **Make your changes:**
+
+- Write clean, readable code
+- Follow existing patterns and conventions
+- Add comments for complex logic
+- Test your changes thoroughly
+
+3. **Commit your changes:**
+
+```bash
+git add .
+git commit -m "feat: add new feature description"
+```
+
+### Commit Message Guidelines
+
+Follow conventional commits format:
+
+```
+<type>(<scope>): <subject>
+
+<body>
+
+<footer>
+```
+
+**Types:**
+- `feat`: New feature
+- `fix`: Bug fix
+- `docs`: Documentation changes
+- `style`: Code style changes (formatting, no logic change)
+- `refactor`: Code refactoring
+- `test`: Adding or updating tests
+- `chore`: Maintenance tasks
+
+**Examples:**
+
+```bash
+feat(voice): add noise cancellation to audio processing
+fix(chat): resolve message duplication in chat interface
+docs(readme): update installation instructions
+refactor(audio): simplify WAV encoding logic
+```
+
+### Testing Your Changes
+
+#### Frontend Testing
+
+```bash
+# Run development server
+npm run dev
+
+# Build production
+npm run build
+
+# Lint code
+npm run lint
+```
+
+#### Backend Testing
+
+```bash
+# Run Rust tests
+cd src-tauri
+cargo test
+
+# Check for compilation errors
+cargo check
+
+# Run with logging
+RUST_LOG=debug cargo tauri dev
+```
+
+#### Manual Testing Checklist
+
+- [ ] Dashi appears and animates correctly
+- [ ] Voice recording works (Cmd+Opt+V)
+- [ ] Transcription returns accurate text
+- [ ] Chat interface works (Cmd+Opt+T)
+- [ ] Messages display correctly
+- [ ] ESC key resets to default state
+- [ ] No console errors or warnings
+
+## Submitting a Pull Request
+
+### Before Submitting
+
+<CardGroup cols={2}>
+  <Card title="Test Thoroughly" icon="vial">
+    Ensure all features work as expected
+  </Card>
+  <Card title="Update Documentation" icon="book">
+    Add or update docs for new features
+  </Card>
+  <Card title="Check Code Quality" icon="code">
+    Run linters and formatters
+  </Card>
+  <Card title="Write Clear Description" icon="pen">
+    Explain what changes you made and why
+  </Card>
+</CardGroup>
+
+### Pull Request Process
+
+1. **Push your branch:**
+
+```bash
+git push origin feature/my-new-feature
+```
+
+2. **Create a pull request on GitHub:**
+
+- Go to the repository on GitHub
+- Click "New Pull Request"
+- Select your branch
+- Fill out the PR template
+
+3. **PR Template:**
+
+```markdown
+## Description
+Brief description of changes
+
+## Type of Change
+- [ ] Bug fix
+- [ ] New feature
+- [ ] Breaking change
+- [ ] Documentation update
+
+## Testing
+How did you test these changes?
+
+## Screenshots (if applicable)
+Add screenshots for UI changes
+
+## Checklist
+- [ ] Code follows project style guidelines
+- [ ] Tests pass locally
+- [ ] Documentation updated
+- [ ] No console warnings or errors
+```
+
+4. **Respond to feedback:**
+
+- Address reviewer comments
+- Make requested changes
+- Push updates to the same branch
+
+5. **Merge:**
+
+- Once approved, a maintainer will merge your PR
+- Delete your feature branch after merge
+
+## Common Contribution Areas
+
+### Frontend Contributions
+
+<CardGroup cols={2}>
+  <Card title="UI Components" icon="paintbrush">
+    Create reusable UI components with Tailwind CSS
+  </Card>
+  <Card title="Animations" icon="wand-magic-sparkles">
+    Add smooth transitions using Framer Motion
+  </Card>
+  <Card title="Accessibility" icon="universal-access">
+    Improve keyboard navigation and screen reader support
+  </Card>
+  <Card title="Performance" icon="gauge-high">
+    Optimize rendering and reduce bundle size
+  </Card>
+</CardGroup>
+
+### Backend Contributions
+
+<CardGroup cols={2}>
+  <Card title="Audio Processing" icon="waveform">
+    Enhance audio quality and noise reduction
+  </Card>
+  <Card title="API Integration" icon="plug">
+    Add support for more AI providers
+  </Card>
+  <Card title="Error Handling" icon="triangle-exclamation">
+    Improve error messages and recovery
+  </Card>
+  <Card title="Performance" icon="rocket">
+    Optimize async operations and memory usage
+  </Card>
+</CardGroup>
+
+### Documentation Contributions
+
+<CardGroup cols={2}>
+  <Card title="Guides" icon="book">
+    Write tutorials and how-to guides
+  </Card>
+  <Card title="API Docs" icon="code">
+    Document functions and components
+  </Card>
+  <Card title="Examples" icon="lightbulb">
+    Add code examples and use cases
+  </Card>
+  <Card title="Translations" icon="language">
+    Translate docs to other languages
+  </Card>
+</CardGroup>
+
+## Reporting Issues
+
+### Bug Reports
+
+When reporting a bug, include:
+
+1. **Description:** Clear description of the bug
+2. **Steps to Reproduce:** Exact steps to reproduce the issue
+3. **Expected Behavior:** What should happen
+4. **Actual Behavior:** What actually happens
+5. **Environment:**
+   - OS (macOS, Windows, Linux)
+   - Node.js version
+   - Rust version
+   - Browser (if applicable)
+6. **Screenshots/Logs:** Visual evidence or error logs
+
+**Template:**
+
+```markdown
+## Bug Description
+Clear description of the bug
+
+## Steps to Reproduce
+1. Go to...
+2. Click on...
+3. See error...
+
+## Expected Behavior
+What should happen
+
+## Actual Behavior
+What actually happens
+
+## Environment
+- OS: macOS 14.0
+- Node: 20.10.0
+- Rust: 1.77.2
+
+## Screenshots
+[Attach screenshots]
+
+## Additional Context
+Any other relevant information
+```
+
+### Feature Requests
+
+When requesting a feature:
+
+1. **Use Case:** Explain why this feature is needed
+2. **Proposed Solution:** How you envision it working
+3. **Alternatives:** Other solutions you've considered
+4. **Additional Context:** Mockups, examples, references
+
+## Code Review Guidelines
+
+### For Contributors
+
+- Be open to feedback and suggestions
+- Ask questions if feedback is unclear
+- Make requested changes promptly
+- Thank reviewers for their time
+
+### For Reviewers
+
+- Be constructive and respectful
+- Explain why changes are needed
+- Acknowledge good work
+- Approve when ready
+
+## Resources
+
+<CardGroup cols={2}>
+  <Card title="Next.js Docs" href="https://nextjs.org/docs" icon="nextjs">
+    Learn about Next.js features and APIs
+  </Card>
+  <Card title="Tauri Docs" href="https://tauri.app/v2/" icon="rust">
+    Explore Tauri framework documentation
+  </Card>
+  <Card title="React Docs" href="https://react.dev" icon="react">
+    Master React concepts and patterns
+  </Card>
+  <Card title="Rust Book" href="https://doc.rust-lang.org/book/" icon="book">
+    Learn Rust programming language
+  </Card>
+</CardGroup>
+
+## Community
+
+<CardGroup cols={2}>
+  <Card title="GitHub Issues" icon="github">
+    Report bugs and request features
+  </Card>
+  <Card title="Discussions" icon="comments">
+    Ask questions and share ideas
+  </Card>
+  <Card title="Discord" icon="discord">
+    Chat with other contributors (if available)
+  </Card>
+  <Card title="Twitter" icon="twitter">
+    Follow updates and announcements
+  </Card>
+</CardGroup>
+
+## License
+
+By contributing to Dashi, you agree that your contributions will be licensed under the same license as the project.
+
+## Questions?
+
+If you have questions about contributing:
+
+1. Check existing documentation
+2. Search GitHub Issues and Discussions
+3. Ask in the community channels
+4. Contact maintainers
+
+Thank you for contributing to Dashi!

@@ -1,0 +1,331 @@
+---
+title: AI Integration
+description: Learn how Dashi integrates with Letta AI for conversational responses and Groq API for voice transcription
+---
+
+## Overview
+
+Dashi uses two powerful AI services to provide intelligent, multimodal interaction:
+
+1. **Letta AI** - Conversational AI agent with streaming responses
+2. **Groq API** - Ultra-fast Whisper-based speech-to-text transcription
+
+## Letta AI Integration
+
+Dashi uses the Letta AI platform for generating conversational responses. The integration is located in `src/lib/letta.ts:1-21`.
+
+### Client Setup
+
+The Letta client connects to a local Letta server:
+
+```typescript
+import { LettaClient } from "@letta-ai/letta-client";
+
+const agent_id = "agent-4d2e89d5-098b-469e-abe7-a671b4fed302";
+
+export const letta_client = new LettaClient({
+  baseUrl: "http://localhost:8283",
+});
+```
+
+<Note>
+The Letta server must be running locally on port 8283 before starting Dashi.
+</Note>
+
+### Generating Responses
+
+The `generate_response` function handles all AI interactions:
+
+```typescript
+export const generate_response = async (input: string) => {
+  const stream = await letta_client.agents.messages.createStream(agent_id, {
+    messages: [
+      {
+        role: "user",
+        content: input,
+      },
+    ],
+    streamTokens: true,
+  });
+  return stream;
+};
+```
+
+### Response Streaming
+
+Letta AI returns responses as an async iterable stream, allowing Dashi to display text as it's generated:
+
+```typescript
+const dashiResponseStream = await generate_response(userInput);
+
+for await (const chunk of dashiResponseStream) {
+  if (chunk.content && chunk.content !== "undefined") {
+    // Update UI with each chunk
+    setVoiceResponse((prev) => prev + chunk.content);
+  }
+}
+```
+
+From `src/components/ui/dashimain.tsx:248-267`.
+
+<Tip>
+Streaming responses create a more natural, conversational experience as users see Dashi "typing" in real-time.
+</Tip>
+
+### Agent Configuration
+
+The agent ID `agent-4d2e89d5-098b-469e-abe7-a671b4fed302` must exist in your Letta server. This agent:
+
+- Maintains conversation context
+- Has a defined personality and memory
+- Can access tools and functions
+- Provides streaming token responses
+
+### Stream Properties
+
+Each chunk in the stream contains:
+- `content`: The text content to display (check for "undefined" string)
+- Additional metadata about the generation
+
+```typescript
+if (chunk.content && chunk.content !== "undefined") {
+  // Only process valid content
+}
+```
+
+## Groq API Integration
+
+Groq powers Dashi's voice transcription using the Whisper large-v3 model. The integration is in the Rust backend at `src-tauri/src/audio.rs:46-83`.
+
+### Client Initialization
+
+The Groq client is initialized once and shared across all requests:
+
+```rust
+use groq_api_rust::{
+  AsyncGroqClient, 
+  SpeechToTextRequest
+};
+
+static GROQ_CLIENT: OnceCell<AsyncGroqClient> = OnceCell::const_new();
+
+async fn get_client() -> &'static AsyncGroqClient {
+  GROQ_CLIENT
+    .get_or_init(|| async {
+      let api_key = env::var("GROQ_API_KEY")
+        .expect("GROQ_API_KEY env variable not set");
+      AsyncGroqClient::new(api_key.to_string(), None).await
+    })
+    .await
+}
+```
+
+<Warning>
+You must set the `GROQ_API_KEY` environment variable before running Dashi. The backend will panic on startup if this variable is not set.
+</Warning>
+
+### Setting Your API Key
+
+**macOS/Linux:**
+```bash
+export GROQ_API_KEY="your-api-key-here"
+```
+
+**Windows (PowerShell):**
+```powershell
+$env:GROQ_API_KEY="your-api-key-here"
+```
+
+**Windows (CMD):**
+```cmd
+set GROQ_API_KEY=your-api-key-here
+```
+
+### Transcription Process
+
+The `transcribe` command handles the full transcription pipeline:
+
+1. **Audio Processing**: Convert PCM samples to WAV format
+2. **Request Configuration**: Set model, temperature, and language
+3. **API Call**: Send to Groq's speech-to-text endpoint
+4. **Response Handling**: Return transcribed text or error
+
+From `src-tauri/src/audio.rs:46-83`:
+
+```rust
+#[tauri::command]
+pub async fn transcribe(audio: Vec<f32>) -> Result<String, String> {
+  // Process audio to WAV format
+  let wav_data = process_audio(audio)?;
+  
+  // Create the speech-to-text request
+  let request = SpeechToTextRequest::new(wav_data)
+    .temperature(0.7)
+    .language("en")
+    .model("whisper-large-v3");
+  
+  // Get client and make request
+  let client = get_client().await;
+  let result = client.speech_to_text(request).await;
+  
+  // Handle response
+  match result {
+    Ok(response) => Ok(response.text),
+    Err(e) => Err(format!("Failed to get response from Groq: {}", e))
+  }
+}
+```
+
+### Model Configuration
+
+**Model**: `whisper-large-v3`
+- Most accurate Whisper model
+- Best for clear transcription
+- Optimized for low latency on Groq's infrastructure
+
+**Temperature**: `0.7`
+- Balanced creativity vs. accuracy
+- Good for natural speech patterns
+- Can be adjusted from 0.0 (deterministic) to 1.0 (creative)
+
+**Language**: `en`
+- English language transcription
+- Can be changed to support other languages
+
+### Audio Format Requirements
+
+Groq expects WAV format with these specifications:
+
+```rust
+let spec = hound::WavSpec {
+    channels: 1,           // Mono audio
+    sample_rate: 16000,    // 16kHz
+    bits_per_sample: 16,   // 16-bit
+    sample_format: SampleFormat::Int,
+};
+```
+
+### Error Handling
+
+The transcribe function handles several error cases:
+
+- **Audio processing errors**: WAV conversion failures
+- **API errors**: Network issues, invalid API key, rate limits
+- **Format errors**: Unsupported audio formats
+
+```rust
+match result {
+  Ok(response) => {
+    println!("Groq API Success. Transcription: {}", response.text);
+    Ok(response.text)
+  }
+  Err(e) => {
+    eprintln!("Groq API Error: {:?}", e);
+    Err(format!("Failed to get response from Groq: {}", e))
+  }
+}
+```
+
+## Data Flow
+
+Here's how the two AI services work together:
+
+### Voice Interaction Flow
+
+1. **User**: Holds Cmd+Opt+V and speaks
+2. **Browser**: Records audio via MediaRecorder API
+3. **Frontend**: Converts to PCM format at 16kHz
+4. **Tauri Backend**: Converts PCM to WAV
+5. **Groq API**: Transcribes audio using Whisper
+6. **Frontend**: Receives transcription text
+7. **Letta AI**: Generates conversational response
+8. **Frontend**: Streams response to UI
+
+### Text Interaction Flow
+
+1. **User**: Types message and presses Enter
+2. **Frontend**: Sends message to Letta AI
+3. **Letta AI**: Generates streaming response
+4. **Frontend**: Displays chunks as they arrive
+
+## Performance Considerations
+
+### Groq API
+
+- **Speed**: ~300ms for typical transcriptions
+- **Accuracy**: High with Whisper large-v3
+- **Cost**: Check Groq pricing for your usage
+
+### Letta AI
+
+- **Streaming**: Sub-second first token
+- **Local**: Runs on localhost for privacy
+- **Memory**: Maintains conversation context
+
+## Dependencies
+
+### Frontend (package.json)
+
+```json
+{
+  "@letta-ai/letta-client": "^0.1.132",
+  "@tauri-apps/cli": "^2.5.0"
+}
+```
+
+### Backend (Cargo.toml implied)
+
+- `groq-api-rust` - Groq API client
+- `hound` - WAV file processing
+- `tokio` - Async runtime
+- `tauri` - Desktop app framework
+
+## Configuration Requirements
+
+<Warning>
+Before running Dashi, ensure:
+
+1. **Letta server** is running on `http://localhost:8283`
+2. **GROQ_API_KEY** environment variable is set
+3. **Agent ID** exists in your Letta instance
+4. **Internet connection** is active for Groq API
+</Warning>
+
+## Troubleshooting
+
+### Letta Connection Issues
+
+**Error**: Cannot connect to Letta server
+
+**Solution**: 
+```bash
+# Start Letta server
+letta server
+```
+
+### Groq API Errors
+
+**Error**: GROQ_API_KEY env variable not set
+
+**Solution**:
+```bash
+export GROQ_API_KEY="gsk_..."
+```
+
+**Error**: Failed to get response from Groq
+
+**Possible causes**:
+- Invalid API key
+- Rate limit exceeded
+- Network connectivity issues
+- Unsupported audio format
+
+### Agent Not Found
+
+**Error**: Agent ID does not exist
+
+**Solution**: Update the `agent_id` in `src/lib/letta.ts:3` to match your Letta agent:
+
+```typescript
+const agent_id = "your-agent-id-here";
+```

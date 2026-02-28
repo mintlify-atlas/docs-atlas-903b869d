@@ -1,0 +1,329 @@
+---
+title: 'useVoiceRecorder'
+description: 'React hook for recording audio from the microphone and transcribing it using Tauri backend'
+---
+
+## Overview
+
+The `useVoiceRecorder` hook provides a complete solution for voice recording and transcription in Dashi. It handles microphone access, audio recording using the MediaRecorder API, audio processing, and transcription through Tauri's backend.
+
+## Import
+
+```typescript
+import { useVoiceRecorder } from "@/lib/tts";
+```
+
+## Usage
+
+```typescript
+const { startRecording, stopAndTranscribe, isRecording, error } = useVoiceRecorder();
+```
+
+### Basic Example
+
+```typescript
+import { useVoiceRecorder } from "@/lib/tts";
+
+function VoiceRecorder() {
+  const { startRecording, stopAndTranscribe, isRecording, error } = useVoiceRecorder();
+
+  const handleKeyDown = async (event: KeyboardEvent) => {
+    if ((event.metaKey || event.ctrlKey) && event.altKey && event.key === "v") {
+      if (!isRecording) {
+        await startRecording();
+      }
+    }
+  };
+
+  const handleKeyUp = async (event: KeyboardEvent) => {
+    if ((event.metaKey || event.ctrlKey) && event.altKey && event.key === "v") {
+      if (isRecording) {
+        const transcription = await stopAndTranscribe();
+        console.log("Transcribed text:", transcription);
+      }
+    }
+  };
+
+  return (
+    <div>
+      {isRecording && <div>Recording...</div>}
+      {error && <div>Error: {error}</div>}
+    </div>
+  );
+}
+```
+
+### Real-World Example from Dashi
+
+This example shows how the hook is used in the main Dashi component with voice and chat integration:
+
+```typescript
+// From dashimain.tsx
+const { startRecording, stopAndTranscribe, isRecording, error } = useVoiceRecorder();
+
+const [transcription, setTranscription] = useState<string | null>(null);
+const [voiceResponse, setVoiceResponse] = useState<string>("");
+
+useEffect(() => {
+  const handleKeyDown = async (event: KeyboardEvent) => {
+    // Command + Option + V to start recording
+    const isVKey = event.key === "v" || event.key === "V" || event.keyCode === 86;
+    if ((event.metaKey || event.ctrlKey) && event.altKey && isVKey) {
+      if (!isRecording) {
+        try {
+          await startRecording();
+        } catch (err) {
+          alert("Failed to start recording: " + err);
+        }
+      }
+    }
+  };
+
+  const handleKeyUp = async (event: KeyboardEvent) => {
+    // Command + Option + V release to stop and transcribe
+    const isVKey = event.key === "v" || event.key === "V" || event.keyCode === 86;
+    if ((event.metaKey || event.ctrlKey) && event.altKey && isVKey) {
+      if (isRecording) {
+        try {
+          const result = await stopAndTranscribe();
+          console.log(result);
+          setTranscription(result);
+          
+          // Add transcription as a user message
+          if (result) {
+            setChatMessages((prev) => [
+              ...prev,
+              { text: result, isUser: true },
+            ]);
+            
+            // Generate AI response
+            const dashiResponseStream = await generate_response(result);
+            setChatMessages((prev) => [...prev, { text: "", isUser: false }]);
+            
+            for await (const chunk of dashiResponseStream) {
+              if (chunk.content && chunk.content !== "undefined") {
+                setVoiceResponse((prev) => prev + chunk.content);
+                setChatMessages((prev) => {
+                  const updated = [...prev];
+                  if (updated.length > 0) {
+                    updated[updated.length - 1] = {
+                      ...updated[updated.length - 1],
+                      text: (updated[updated.length - 1].text || "") + chunk.content,
+                    };
+                  }
+                  return updated;
+                });
+              }
+            }
+          }
+        } catch (err) {
+          alert("Failed to transcribe: " + err);
+        }
+      }
+    }
+  };
+
+  document.addEventListener("keydown", handleKeyDown, true);
+  document.addEventListener("keyup", handleKeyUp, true);
+  
+  return () => {
+    document.removeEventListener("keydown", handleKeyDown, true);
+    document.removeEventListener("keyup", handleKeyUp, true);
+  };
+}, [isRecording]);
+```
+
+## Return Values
+
+<ResponseField name="isRecording" type="boolean">
+  Indicates whether audio is currently being recorded. Use this to show recording status in your UI.
+</ResponseField>
+
+<ResponseField name="error" type="string | null">
+  Contains error message if something went wrong, or `null` if no error. Common errors include:
+  - "Recording is already in progress."
+  - "Microphone access denied. Please enable it in your browser settings."
+  - "No active recording to stop."
+  - "Failed to transcribe audio: [error details]"
+</ResponseField>
+
+<ResponseField name="startRecording" type="() => Promise<void>">
+  Initiates audio recording from the user's microphone.
+  
+  **Behavior:**
+  - Requests microphone access via `navigator.mediaDevices.getUserMedia()`
+  - Creates a MediaRecorder with `audio/webm` MIME type
+  - Sets `isRecording` to `true`
+  - Stores audio chunks in an internal buffer
+  - Sets error message if recording is already in progress or microphone access is denied
+  
+  **Throws:**
+  - Sets error state if microphone access is denied
+  - Sets error state if recording is already in progress
+</ResponseField>
+
+<ResponseField name="stopAndTranscribe" type="() => Promise<string | null>">
+  Stops the current recording and transcribes the audio to text.
+  
+  **Behavior:**
+  1. Stops the MediaRecorder
+  2. Creates audio Blob from recorded chunks
+  3. Converts audio to PCM format at 16kHz sample rate
+  4. Sends audio data to Tauri backend via `invoke("transcribe")`
+  5. Returns transcribed text or `null` on error
+  
+  **Returns:**
+  - `Promise<string>` - The transcribed text if successful
+  - `Promise<null>` - If no active recording or transcription fails
+  
+  **Audio Processing:**
+  - Sample rate: 16000 Hz
+  - Channel: Mono (first channel only)
+  - Format: PCM float array
+</ResponseField>
+
+## Implementation Details
+
+### TypeScript Interface
+
+```typescript
+interface UseVoiceRecorderResult {
+  isRecording: boolean;
+  error: string | null;
+  startRecording: () => Promise<void>;
+  stopAndTranscribe: () => Promise<string | null>;
+}
+```
+
+### Complete Hook Implementation
+
+```typescript
+import { useRef, useState, useCallback } from "react";
+import { invoke } from "@tauri-apps/api/core";
+
+interface UseVoiceRecorderResult {
+  isRecording: boolean;
+  error: string | null;
+  startRecording: () => Promise<void>;
+  stopAndTranscribe: () => Promise<string | null>;
+}
+
+export function useVoiceRecorder(): UseVoiceRecorderResult {
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const [isRecording, setIsRecording] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const startRecording = useCallback(async () => {
+    if (mediaRecorderRef.current?.state === "recording") {
+      setError("Recording is already in progress.");
+      return;
+    }
+    setError(null);
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mediaRecorder = new MediaRecorder(stream, {
+        mimeType: "audio/webm",
+      });
+      audioChunksRef.current = [];
+      mediaRecorder.addEventListener("dataavailable", (event) => {
+        audioChunksRef.current.push(event.data);
+      });
+      mediaRecorderRef.current = mediaRecorder;
+      mediaRecorder.start();
+      setIsRecording(true);
+    } catch (err: any) {
+      setError(
+        "Microphone access denied. Please enable it in your browser settings."
+      );
+      setIsRecording(false);
+    }
+  }, []);
+
+  const stopAndTranscribe = useCallback(async (): Promise<string | null> => {
+    if (
+      !mediaRecorderRef.current ||
+      mediaRecorderRef.current.state === "inactive"
+    ) {
+      setError("No active recording to stop.");
+      return null;
+    }
+    setError(null);
+    return new Promise((resolve, reject) => {
+      mediaRecorderRef.current!.addEventListener(
+        "stop",
+        async () => {
+          try {
+            const audioBlob = new Blob(audioChunksRef.current, {
+              type: mediaRecorderRef.current!.mimeType,
+            });
+            audioChunksRef.current = [];
+            mediaRecorderRef
+              .current!.stream.getTracks()
+              .forEach((track) => track.stop());
+            mediaRecorderRef.current = null;
+            
+            // Process and send to backend
+            const audioContext = new AudioContext({ sampleRate: 16000 });
+            const arrayBuffer = await audioBlob.arrayBuffer();
+            const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+            const pcmData = audioBuffer.getChannelData(0); // Use first channel (mono)
+            const audioSamples = Array.from(pcmData);
+            const transcription = await invoke<string>("transcribe", {
+              audio: audioSamples,
+            });
+            setIsRecording(false);
+            resolve(transcription);
+          } catch (err: any) {
+            setError("Failed to transcribe audio: " + err);
+            setIsRecording(false);
+            reject(err);
+          }
+        },
+        { once: true }
+      );
+      mediaRecorderRef.current!.stop();
+    });
+  }, []);
+
+  return { isRecording, error, startRecording, stopAndTranscribe };
+}
+```
+
+## Audio Processing Flow
+
+1. **Recording Start**
+   - Request microphone permission
+   - Initialize MediaRecorder with webm format
+   - Start collecting audio chunks
+
+2. **Recording Stop**
+   - Stop MediaRecorder
+   - Create Blob from audio chunks
+   - Clean up media streams
+
+3. **Audio Processing**
+   - Create AudioContext at 16kHz
+   - Decode audio buffer
+   - Extract mono channel PCM data
+   - Convert to float array
+
+4. **Transcription**
+   - Send PCM data to Tauri backend
+   - Call `invoke("transcribe", { audio })`
+   - Return transcribed text
+
+## Notes
+
+- The hook uses `audio/webm` MIME type for recording
+- Audio is downsampled to 16kHz for transcription
+- Only the first (mono) channel is used for transcription
+- All state updates are handled via React hooks (`useState`, `useCallback`)
+- MediaRecorder and audio chunks are stored in refs to persist across re-renders
+- The hook automatically cleans up media streams after transcription
+
+## See Also
+
+- [Tauri Invoke API](https://tauri.app/v1/api/js/core/#invoke)
+- [MediaRecorder API](https://developer.mozilla.org/en-US/docs/Web/API/MediaRecorder)
+- [Web Audio API](https://developer.mozilla.org/en-US/docs/Web/API/Web_Audio_API)

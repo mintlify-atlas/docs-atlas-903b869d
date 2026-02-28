@@ -1,0 +1,163 @@
+---
+title: Voice Interaction
+description: Record your voice and transcribe it using Groq's Whisper API for seamless voice-to-text communication with Dashi
+---
+
+## Overview
+
+Dashi provides powerful voice recording and transcription capabilities, allowing you to interact with your AI assistant using natural speech. The voice interaction system uses the Groq Whisper API for high-quality, fast transcription.
+
+## Voice Recording Flow
+
+The voice recording system is implemented using the `useVoiceRecorder` hook located in `src/lib/tts.ts:11-89`.
+
+### Starting a Recording
+
+When you press **Cmd+Opt+V** (or **Ctrl+Alt+V** on Windows/Linux), Dashi:
+
+1. Requests microphone access via the browser's MediaDevices API
+2. Creates a `MediaRecorder` instance with `audio/webm` format
+3. Begins capturing audio chunks
+4. Shows visual feedback with animated music notes
+
+```typescript
+const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+const mediaRecorder = new MediaRecorder(stream, {
+  mimeType: "audio/webm",
+});
+```
+
+<Note>
+The first time you use voice recording, your browser will prompt you to grant microphone permissions.
+</Note>
+
+### Stopping and Transcribing
+
+When you release **Cmd+Opt+V**, Dashi:
+
+1. Stops the MediaRecorder and collects all audio chunks
+2. Converts the audio to PCM format at 16kHz sample rate
+3. Sends the audio data to the Tauri backend via the `transcribe` command
+4. The backend processes the audio and calls Groq's Whisper API
+5. Returns the transcribed text to the frontend
+
+```typescript
+const audioContext = new AudioContext({ sampleRate: 16000 });
+const arrayBuffer = await audioBlob.arrayBuffer();
+const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+const pcmData = audioBuffer.getChannelData(0);
+const audioSamples = Array.from(pcmData);
+
+const transcription = await invoke<string>("transcribe", {
+  audio: audioSamples,
+});
+```
+
+## Backend Processing
+
+The Rust backend (`src-tauri/src/audio.rs:46-83`) handles the transcription:
+
+### Audio Processing
+
+1. **WAV Conversion**: PCM samples are converted to WAV format with these specs:
+   - Channels: 1 (mono)
+   - Sample Rate: 16000 Hz
+   - Bits per Sample: 16
+   - Sample Format: Int
+
+2. **Groq API Integration**: The WAV data is sent to Groq's Whisper API:
+
+```rust
+let request = SpeechToTextRequest::new(wav_data)
+    .temperature(0.7)
+    .language("en")
+    .model("whisper-large-v3");
+
+let result = client.speech_to_text(request).await;
+```
+
+<Warning>
+Make sure to set the `GROQ_API_KEY` environment variable before running Dashi. The backend will fail to initialize without it.
+</Warning>
+
+## Visual Feedback
+
+While recording, Dashi provides visual feedback:
+
+- **Expanded box**: The black box expands to 300px width
+- **Animated music notes**: Two gradient-colored musical note icons appear and pulse
+- **Recording indicator**: Visual cues show the recording is active
+
+From `src/components/ui/dashimain.tsx:613-682`:
+
+```typescript
+{isExpanded && !isActivatedState && (
+  <motion.div
+    initial={{ opacity: 0 }}
+    animate={{ opacity: 1 }}
+    exit={{ opacity: 0 }}
+  >
+    {/* Animated music note vectors */}
+  </motion.div>
+)}
+```
+
+## Voice Response
+
+After transcription, Dashi:
+
+1. Adds your transcribed message to the chat interface
+2. Sends the text to the Letta AI agent for processing
+3. Displays the AI's streaming response next to the Dashi avatar
+
+```typescript
+const dashiResponseStream = await generate_response(result);
+for await (const chunk of dashiResponseStream) {
+  if (chunk.content && chunk.content !== "undefined") {
+    setVoiceResponse((prev) => prev + chunk.content);
+  }
+}
+```
+
+<Tip>
+You can hold **Cmd+Opt+V** for as long as you want to record. The transcription begins only when you release the keys.
+</Tip>
+
+## Error Handling
+
+The voice recorder handles several error scenarios:
+
+- **Microphone access denied**: Shows an alert prompting you to enable microphone permissions
+- **Already recording**: Prevents duplicate recordings
+- **Transcription failure**: Displays error messages from the backend
+- **No active recording**: Prevents attempting to stop when not recording
+
+From `src/lib/tts.ts:35-40`:
+
+```typescript
+catch (err: any) {
+  setError(
+    "Microphone access denied. Please enable it in your browser settings."
+  );
+  setIsRecording(false);
+}
+```
+
+## Requirements
+
+- Modern web browser with MediaDevices API support
+- Microphone access permissions
+- Active internet connection for Groq API
+- Valid `GROQ_API_KEY` environment variable
+
+## Dependencies
+
+- **Frontend**: 
+  - `@tauri-apps/api` - Invoke backend commands
+  - Browser MediaRecorder API - Audio recording
+  - AudioContext API - Audio processing
+
+- **Backend**:
+  - `groq-api-rust` - Groq API client
+  - `hound` - WAV file processing
+  - `tokio` - Async runtime

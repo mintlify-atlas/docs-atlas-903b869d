@@ -1,0 +1,319 @@
+---
+title: "Transcription API"
+description: "Groq-powered speech-to-text transcription with audio processing pipeline"
+---
+
+## Overview
+
+The transcription API provides real-time speech-to-text conversion using Groq's Whisper model. It handles the complete audio processing pipeline from WebM format through PCM conversion to the Groq API.
+
+## Audio Processing Flow
+
+The transcription system follows this pipeline:
+
+1. **Frontend Capture**: Browser MediaRecorder captures audio in WebM format
+2. **PCM Conversion**: WebM is decoded to PCM float32 array at 16kHz sample rate
+3. **Tauri Command**: PCM data is sent to Rust backend via `transcribe` command
+4. **WAV Encoding**: PCM samples are encoded to 16-bit WAV format in memory
+5. **Groq API**: WAV data is sent to Groq's Whisper API for transcription
+6. **Result**: Transcribed text is returned to frontend
+
+## transcribe Command
+
+Asynchronous Tauri command that processes audio data and returns transcribed text.
+
+### Function Signature
+
+```rust src-tauri/src/audio.rs
+#[tauri::command]
+pub async fn transcribe(audio: Vec<f32>) -> Result<String, String>
+```
+
+### Parameters
+
+<ParamField path="audio" type="Vec<f32>" required>
+  Array of PCM audio samples as 32-bit floating point values, normalized to the range [-1.0, 1.0]. Must be mono channel at 16kHz sample rate.
+</ParamField>
+
+### Response
+
+<ResponseField name="Success" type="String">
+  The transcribed text from the audio input
+</ResponseField>
+
+<ResponseField name="Error" type="String">
+  Error message if transcription fails, including:
+  - WAV encoding errors
+  - Groq API connection errors
+  - Invalid audio format errors
+</ResponseField>
+
+### TypeScript Usage
+
+```typescript src/lib/tts.ts
+import { invoke } from "@tauri-apps/api/core";
+
+const stopAndTranscribe = async (): Promise<string | null> => {
+  // Get audio blob from MediaRecorder
+  const audioBlob = new Blob(audioChunks, { type: "audio/webm" });
+  
+  // Convert to PCM at 16kHz
+  const audioContext = new AudioContext({ sampleRate: 16000 });
+  const arrayBuffer = await audioBlob.arrayBuffer();
+  const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+  const pcmData = audioBuffer.getChannelData(0); // Mono channel
+  const audioSamples = Array.from(pcmData);
+  
+  // Invoke transcription
+  const transcription = await invoke<string>("transcribe", {
+    audio: audioSamples,
+  });
+  
+  return transcription;
+};
+```
+
+## process_audio Helper
+
+Internal function that converts PCM samples to WAV format.
+
+### Function Signature
+
+```rust src-tauri/src/audio.rs
+pub fn process_audio(audio: Vec<f32>) -> Result<Vec<u8>, String>
+```
+
+### Parameters
+
+<ParamField path="audio" type="Vec<f32>" required>
+  Array of PCM audio samples as 32-bit floating point values
+</ParamField>
+
+### WAV Specification
+
+The function encodes audio with the following specification:
+
+- **Channels**: 1 (mono)
+- **Sample Rate**: 16000 Hz
+- **Bits Per Sample**: 16
+- **Sample Format**: Signed integer
+
+### Conversion Process
+
+Float samples in range [-1.0, 1.0] are converted to 16-bit signed integers:
+
+```rust
+let sample_i16 = (sample * 32767.0) as i16;
+```
+
+### Response
+
+<ResponseField name="Success" type="Vec<u8>">
+  WAV file data as byte array, ready for Groq API submission
+</ResponseField>
+
+<ResponseField name="Error" type="String">
+  Error message if WAV encoding fails
+</ResponseField>
+
+## Groq Client Configuration
+
+The transcription service uses a singleton AsyncGroqClient instance.
+
+### Initialization
+
+```rust src-tauri/src/audio.rs
+static GROQ_CLIENT: OnceCell<AsyncGroqClient> = OnceCell::const_new();
+
+async fn get_client() -> &'static AsyncGroqClient {
+  GROQ_CLIENT
+    .get_or_init(|| async {
+      let api_key = env::var("GROQ_API_KEY")
+        .expect("GROQ_API_KEY env variable not set");
+      AsyncGroqClient::new(api_key.to_string(), None).await
+    })
+    .await
+}
+```
+
+### Environment Variables
+
+<ParamField path="GROQ_API_KEY" type="string" required>
+  Groq API key for authentication. Must be set before application starts.
+</ParamField>
+
+## Groq API Request
+
+The transcription uses Groq's Speech-to-Text API with the following configuration:
+
+```rust src-tauri/src/audio.rs
+let request = SpeechToTextRequest::new(wav_data)
+  .temperature(0.7)
+  .language("en")
+  .model("whisper-large-v3");
+
+let result = client.speech_to_text(request).await;
+```
+
+### Request Parameters
+
+<ParamField path="wav_data" type="Vec<u8>" required>
+  WAV file data as byte array
+</ParamField>
+
+<ParamField path="temperature" type="f32" default="0.7">
+  Sampling temperature for transcription, range [0.0, 1.0]. Lower values make output more deterministic.
+</ParamField>
+
+<ParamField path="language" type="string" default="en">
+  ISO 639-1 language code for transcription. Set to "en" for English.
+</ParamField>
+
+<ParamField path="model" type="string" default="whisper-large-v3">
+  Groq Whisper model to use. Options include whisper-large-v3.
+</ParamField>
+
+## Error Handling
+
+The transcription API provides detailed error messages for debugging:
+
+```rust
+match result {
+  Ok(response) => {
+    println!("Groq API Success. Transcription: {}", response.text);
+    Ok(response.text)
+  }
+  Err(e) => {
+    eprintln!("Groq API Error: {:?}", e);
+    Err(format!("Failed to get response from Groq: {}", e))
+  }
+}
+```
+
+### Common Errors
+
+- **"GROQ_API_KEY env variable not set"**: API key not configured
+- **"Failed to get response from Groq"**: Network or API error
+- **WAV encoding errors**: Invalid audio format or corrupted data
+
+## Dependencies
+
+Required Cargo dependencies:
+
+```toml Cargo.toml
+hound = "3.5.1"              # WAV encoding
+tokio = "1.45.1"             # Async runtime
+once_cell = "1.21.3"         # Singleton pattern
+groq_api_rust = { path = "./groq_rs" }  # Groq API client
+dotenv = "0.15.0"            # Environment variables
+```
+
+## Complete Example
+
+### Frontend (React Hook)
+
+```typescript src/lib/tts.ts
+import { useRef, useState, useCallback } from "react";
+import { invoke } from "@tauri-apps/api/core";
+
+export function useVoiceRecorder() {
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const [isRecording, setIsRecording] = useState(false);
+
+  const startRecording = async () => {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    const mediaRecorder = new MediaRecorder(stream, {
+      mimeType: "audio/webm",
+    });
+    audioChunksRef.current = [];
+    
+    mediaRecorder.addEventListener("dataavailable", (event) => {
+      audioChunksRef.current.push(event.data);
+    });
+    
+    mediaRecorderRef.current = mediaRecorder;
+    mediaRecorder.start();
+    setIsRecording(true);
+  };
+
+  const stopAndTranscribe = async (): Promise<string | null> => {
+    return new Promise((resolve, reject) => {
+      mediaRecorderRef.current!.addEventListener(
+        "stop",
+        async () => {
+          try {
+            const audioBlob = new Blob(audioChunksRef.current, {
+              type: "audio/webm",
+            });
+            
+            // Convert to PCM
+            const audioContext = new AudioContext({ sampleRate: 16000 });
+            const arrayBuffer = await audioBlob.arrayBuffer();
+            const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+            const pcmData = audioBuffer.getChannelData(0);
+            const audioSamples = Array.from(pcmData);
+            
+            // Transcribe
+            const transcription = await invoke<string>("transcribe", {
+              audio: audioSamples,
+            });
+            
+            setIsRecording(false);
+            resolve(transcription);
+          } catch (err) {
+            reject(err);
+          }
+        },
+        { once: true }
+      );
+      mediaRecorderRef.current!.stop();
+    });
+  };
+
+  return { isRecording, startRecording, stopAndTranscribe };
+}
+```
+
+### Backend (Rust)
+
+```rust src-tauri/src/audio.rs
+use hound::SampleFormat;
+use std::io::Cursor;
+use groq_api_rust::{AsyncGroqClient, SpeechToTextRequest};
+use std::env;
+use tokio::sync::OnceCell;
+
+static GROQ_CLIENT: OnceCell<AsyncGroqClient> = OnceCell::const_new();
+
+async fn get_client() -> &'static AsyncGroqClient {
+  GROQ_CLIENT
+    .get_or_init(|| async {
+      let api_key = env::var("GROQ_API_KEY")
+        .expect("GROQ_API_KEY env variable not set");
+      AsyncGroqClient::new(api_key.to_string(), None).await
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn transcribe(audio: Vec<f32>) -> Result<String, String> {
+  // Process audio to WAV format
+  let wav_data = process_audio(audio)?;
+  
+  // Create speech-to-text request
+  let request = SpeechToTextRequest::new(wav_data)
+    .temperature(0.7)
+    .language("en")
+    .model("whisper-large-v3");
+  
+  // Get Groq client and transcribe
+  let client = get_client().await;
+  let result = client.speech_to_text(request).await;
+  
+  match result {
+    Ok(response) => Ok(response.text),
+    Err(e) => Err(format!("Failed to get response from Groq: {}", e))
+  }
+}
+```

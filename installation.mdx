@@ -1,0 +1,396 @@
+---
+title: Installation
+description: Complete installation guide for Dashi with detailed configuration steps
+---
+
+# Installation Guide
+
+This guide provides comprehensive instructions for installing and configuring Dashi, the AI desktop companion.
+
+## System Requirements
+
+### Minimum Requirements
+
+- **Operating System**: macOS 10.15+, Windows 10+, or Linux
+- **Node.js**: Version 20.0.0 or higher
+- **Memory**: 4GB RAM minimum
+- **Disk Space**: 500MB for dependencies and application
+
+### Recommended Package Managers
+
+- **Bun** (recommended for development)
+- **npm** (bundled with Node.js)
+- **yarn** or **pnpm** (alternatives)
+
+## Installation Steps
+
+<Steps>
+  <Step title="Install Node.js or Bun">
+    Install a JavaScript runtime:
+    
+    **Option 1: Install Bun (Recommended)**
+    ```bash
+    curl -fsSL https://bun.sh/install | bash
+    ```
+    
+    **Option 2: Install Node.js**
+    
+    Download from [nodejs.org](https://nodejs.org/) or use a version manager:
+    
+    ```bash
+    # Using nvm
+    nvm install 20
+    nvm use 20
+    ```
+  </Step>
+
+  <Step title="Clone the Repository">
+    Clone the Dashi source code:
+    
+    ```bash
+    git clone https://github.com/yourusername/dashi.git
+    cd dashi
+    ```
+  </Step>
+
+  <Step title="Install Dependencies">
+    Install all required packages from `package.json`:
+    
+    <CodeGroup>
+      ```bash npm
+      npm install
+      ```
+      
+      ```bash yarn
+      yarn install
+      ```
+      
+      ```bash pnpm
+      pnpm install
+      ```
+      
+      ```bash bun
+      bun install
+      ```
+    </CodeGroup>
+    
+    This installs:
+    - **Core dependencies**: Next.js 15.3.4, React 19, Tauri CLI 2.5.0
+    - **AI integration**: @letta-ai/letta-client ^0.1.132
+    - **Animation**: framer-motion ^12.18.1, lottie-react ^2.4.1
+    - **UI components**: @radix-ui/react-slot, lucide-react
+    - **Styling**: Tailwind CSS 4, tailwind-merge
+  </Step>
+
+  <Step title="Configure Environment (Optional)">
+    Set up environment variables if needed for AI integrations:
+    
+    ```bash
+    # Create .env.local file
+    touch .env.local
+    ```
+    
+    Add any required API keys or configuration:
+    
+    ```bash
+    # .env.local
+    LETTA_API_KEY=your_api_key_here
+    ```
+  </Step>
+</Steps>
+
+## Development Setup
+
+### Running the Development Server
+
+Start the Next.js development server with Turbopack:
+
+<CodeGroup>
+  ```bash npm
+  npm run dev
+  ```
+  
+  ```bash yarn
+  yarn dev
+  ```
+  
+  ```bash pnpm
+  pnpm dev
+  ```
+  
+  ```bash bun
+  bun dev
+  ```
+</CodeGroup>
+
+The development server starts at **http://localhost:3000** with hot module replacement enabled.
+
+### Development Scripts
+
+Available npm scripts from `package.json`:
+
+```json
+{
+  "scripts": {
+    "dev": "next dev --turbopack",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint"
+  }
+}
+```
+
+## Tauri Desktop Application
+
+### Installing Tauri Prerequisites
+
+Tauri requires additional system dependencies:
+
+**macOS:**
+```bash
+xcode-select --install
+```
+
+**Windows:**
+- Install [Microsoft Visual Studio C++ Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/)
+- Install [WebView2](https://developer.microsoft.com/en-us/microsoft-edge/webview2/)
+
+**Linux (Ubuntu/Debian):**
+```bash
+sudo apt update
+sudo apt install libwebkit2gtk-4.0-dev \
+  build-essential \
+  curl \
+  wget \
+  libssl-dev \
+  libgtk-3-dev \
+  libayatana-appindicator3-dev \
+  librsvg2-dev
+```
+
+### Running Tauri in Development
+
+Launch the desktop application in development mode:
+
+```bash
+bun tauri dev
+# or
+npx tauri dev
+```
+
+This command:
+1. Runs `bun dev` to start the Next.js server (configured in `tauri.conf.json`)
+2. Opens a native window pointing to `http://localhost:3000`
+3. Enables hot reload for both frontend and Tauri changes
+
+### Tauri Configuration
+
+The Tauri configuration in `src-tauri/tauri.conf.json`:
+
+```json
+{
+  "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
+  "productName": "dashi",
+  "version": "0.1.0",
+  "identifier": "com.tauri.dev",
+  "build": {
+    "frontendDist": "../out",
+    "devUrl": "http://localhost:3000",
+    "beforeDevCommand": "bun dev",
+    "beforeBuildCommand": "bun build"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "dashi",
+        "width": 800,
+        "height": 600,
+        "resizable": true,
+        "fullscreen": false
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self' blob: data: media:; script-src 'self' 'unsafe-eval';"
+    }
+  }
+}
+```
+
+## Production Build
+
+### Building for Production
+
+<Steps>
+  <Step title="Build Next.js App">
+    Create an optimized production build:
+    
+    <CodeGroup>
+      ```bash npm
+      npm run build
+      ```
+      
+      ```bash bun
+      bun build
+      ```
+    </CodeGroup>
+    
+    This generates static files in the `out` directory.
+  </Step>
+
+  <Step title="Build Tauri Application">
+    Build the desktop application bundle:
+    
+    ```bash
+    bun tauri build
+    # or
+    npx tauri build
+    ```
+    
+    Tauri will create platform-specific installers:
+    - **macOS**: `.dmg` and `.app` in `src-tauri/target/release/bundle/`
+    - **Windows**: `.exe` and `.msi` in `src-tauri/target/release/bundle/`
+    - **Linux**: `.AppImage` and `.deb` in `src-tauri/target/release/bundle/`
+  </Step>
+
+  <Step title="Test the Build">
+    Test the production build locally:
+    
+    <CodeGroup>
+      ```bash npm
+      npm run start
+      ```
+      
+      ```bash bun
+      bun start
+      ```
+    </CodeGroup>
+  </Step>
+</Steps>
+
+## Project Structure
+
+Understanding the Dashi project structure:
+
+```
+dashi/
+├── src/
+│   ├── app/
+│   │   └── page.tsx              # Main application page
+│   ├── components/
+│   │   └── ui/
+│   │       ├── dashimain.tsx     # Main Dashi component
+│   │       └── musicnotes.tsx    # Animation components
+│   └── lib/
+│       ├── letta.ts              # Letta AI integration
+│       └── tts.ts                # Voice recording utilities
+├── src-tauri/
+│   ├── tauri.conf.json           # Tauri configuration
+│   ├── Cargo.toml                # Rust dependencies
+│   └── src/
+│       └── main.rs               # Tauri main process
+├── public/
+│   ├── imdashianimate.json       # Lottie animation
+│   └── darkmodemonterey.jpg      # Background image
+└── package.json                  # Node.js dependencies
+```
+
+## Key Dependencies
+
+### AI & Integration
+
+```json
+"@letta-ai/letta-client": "^0.1.132",
+"use-mcp": "^0.0.9"
+```
+
+Letta AI client provides conversational AI capabilities with streaming responses.
+
+### Animation Libraries
+
+```json
+"framer-motion": "^12.18.1",
+"lottie-react": "^2.4.1"
+```
+
+Framer Motion powers smooth transitions and animations in `dashimain.tsx`:
+
+```tsx
+<motion.div
+  animate={{
+    width: chatModeWidth,
+    height: currentHeight,
+    opacity: isActivated ? 0.3 : 0.1,
+  }}
+  transition={{ duration: 0.5, ease: "easeInOut" }}
+/>
+```
+
+### UI Components
+
+```json
+"@radix-ui/react-slot": "^1.2.3",
+"lucide-react": "^0.522.0",
+"tailwindcss": "^4"
+```
+
+## Troubleshooting
+
+### Common Issues
+
+**Port 3000 already in use:**
+```bash
+# Kill process on port 3000
+lsof -ti:3000 | xargs kill -9
+```
+
+**Tauri build fails:**
+- Ensure all system dependencies are installed
+- Check Rust is installed: `rustc --version`
+- Update Tauri CLI: `cargo install tauri-cli`
+
+**Module not found errors:**
+```bash
+# Clear node_modules and reinstall
+rm -rf node_modules package-lock.json
+npm install
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Quickstart Guide" icon="rocket" href="/quickstart">
+    Learn how to use Dashi's voice and chat features
+  </Card>
+  
+  <Card title="Customize Dashi" icon="code">
+    Explore the source code to modify animations and behavior
+  </Card>
+</CardGroup>
+
+## Verification
+
+Verify your installation:
+
+<Steps>
+  <Step title="Check Dependencies">
+    Verify all packages are installed:
+    
+    ```bash
+    npm list --depth=0
+    ```
+  </Step>
+
+  <Step title="Run Development Server">
+    Start the server and visit http://localhost:3000:
+    
+    ```bash
+    bun dev
+    ```
+  </Step>
+
+  <Step title="Test Keyboard Shortcuts">
+    - Press **Cmd+Opt+T** to activate chat mode
+    - Press **Cmd+Opt+V** to test voice mode
+    - Press **ESC** to reset
+  </Step>
+</Steps>

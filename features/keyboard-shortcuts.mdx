@@ -1,0 +1,337 @@
+---
+title: Keyboard Shortcuts
+description: Master all of Dashi's keyboard shortcuts for voice recording, chat mode, and navigation
+---
+
+## Overview
+
+Dashi is designed for keyboard-first interaction, with intuitive shortcuts that make AI assistance seamless and fast. All keyboard shortcuts are handled in `src/components/ui/dashimain.tsx:147-286`.
+
+## Core Shortcuts
+
+### Activate Dashi
+
+**Click the Dashi box**
+
+- Brings Dashi from idle state (10% opacity) to active state (30% opacity)
+- Required before using any keyboard shortcuts
+- Alternative to keyboard shortcuts for initial activation
+
+### Voice Recording
+
+**Cmd+Opt+V** (macOS) / **Ctrl+Alt+V** (Windows/Linux)
+
+- **Press**: Start recording audio from your microphone
+- **Hold**: Continue recording (no time limit)
+- **Release**: Stop recording and send for transcription
+
+From `src/components/ui/dashimain.tsx:191-214`:
+
+```typescript
+const isVKey = event.key === "v" || event.key === "V" || event.keyCode === 86;
+if ((event.metaKey || event.ctrlKey) && event.altKey && isVKey) {
+  if (!isExpanded && !isActivatedState) {
+    setIsExpanded(true); // Expand while held
+  }
+  if (!isRecording) {
+    try {
+      await startRecording();
+    } catch (err) {
+      alert("Failed to start recording: " + err);
+    }
+  }
+}
+```
+
+**Visual feedback:**
+- Black box expands to 300px width
+- Animated music note icons appear
+- Gradient colors pulse (#D500D8 and #8CEBE5)
+
+**On release** (`src/components/ui/dashimain.tsx:227-276`):
+
+```typescript
+const handleKeyUp = async (event: KeyboardEvent) => {
+  if ((event.metaKey || event.ctrlKey) && event.altKey && isVKey) {
+    if (isExpanded && !isActivatedState) {
+      setIsExpanded(false); // Collapse when released
+    }
+    if (isRecording) {
+      const result = await stopAndTranscribe();
+      // Process transcription and generate AI response
+    }
+  }
+};
+```
+
+<Tip>
+You can record while in chat mode! The transcription will appear as a new message in the chat interface.
+</Tip>
+
+### Chat Mode
+
+**Cmd+Opt+T** (macOS) / **Ctrl+Alt+T** (Windows/Linux)
+
+- Opens the full chat interface
+- 400px × 600px window appears
+- Dashi avatar moves to top-left
+- Text input becomes active
+
+From `src/components/ui/dashimain.tsx:179-189`:
+
+```typescript
+const isTKey = event.key === "t" || event.key === "T" || event.keyCode === 84;
+if ((event.metaKey || event.ctrlKey) && event.altKey && isTKey) {
+  if (isActivated && !isActivatedState) {
+    setIsActivatedState(true);
+    setIsExpanded(false); // Reset voice expansion
+  }
+}
+```
+
+**What happens:**
+1. Voice expansion mode disables
+2. Chat interface fades in (0.8s animation)
+3. Message history area appears
+4. Input field becomes focused
+5. Dashi repositions to `calc(50% - 180px)` from left
+
+### Reset to Default
+
+**ESC** (Escape key)
+
+- Resets Dashi to idle state
+- Clears all chat messages
+- Stops any voice response generation
+- Fades out all expanded UI elements
+
+From `src/components/ui/dashimain.tsx:172-177`:
+
+```typescript
+if (event.key === "Escape" || event.keyCode === 27) {
+  console.log("ESC key detected - resetting to default mode");
+  handleReset();
+  return;
+}
+```
+
+**Reset sequence** (`src/components/ui/dashimain.tsx:130-145`):
+
+```typescript
+const handleReset = () => {
+  setIsResetting(true);
+  setPositionsSetToDefault(false);
+  
+  setTimeout(() => {
+    setIsActivated(false);
+    setIsExpanded(false);
+    setIsActivatedState(false);
+    setHasMovedLeft(false);
+    setVoiceResponse("");
+    setIsGeneratingVoiceResponse(false);
+    setPositionsSetToDefault(true);
+    setIsResetting(false);
+  }, 800); // Fade out animation duration
+};
+```
+
+<Warning>
+Pressing ESC will clear all message history. There is no undo.
+</Warning>
+
+## Development/Testing Shortcuts
+
+These shortcuts work without modifier keys for easier testing:
+
+### Test Voice Mode
+
+**V** key (no modifiers)
+
+- Same as Cmd+Opt+V but without modifiers
+- Only works when Dashi is activated
+- For development and testing
+
+From `src/components/ui/dashimain.tsx:207-214`:
+
+```typescript
+if (isVKey && !event.metaKey && !event.altKey && !event.ctrlKey) {
+  if (isActivated && !isExpanded && !isActivatedState) {
+    setIsExpanded(true);
+  }
+}
+```
+
+### Test Chat Mode
+
+**T** key (no modifiers)
+
+- Same as Cmd+Opt+T but without modifiers
+- Only works when Dashi is activated
+- For development and testing
+
+From `src/components/ui/dashimain.tsx:216-224`:
+
+```typescript
+if (isTKey && !event.metaKey && !event.altKey && !event.ctrlKey) {
+  if (isActivated && !isActivatedState) {
+    setIsActivatedState(true);
+    setIsExpanded(false);
+  }
+}
+```
+
+<Note>
+Test shortcuts are useful during development but may be removed in production builds.
+</Note>
+
+## Chat Interface Shortcuts
+
+When the chat interface is open:
+
+### Send Message
+
+**Enter** key
+
+- Submits the current message
+- Clears the input field
+- Starts streaming AI response
+
+### Continue Typing
+
+**Shift+Enter**
+
+- Adds a new line (standard behavior)
+- Does not submit the message
+
+## Keyboard Event Handling
+
+Dashi uses capture phase event listeners to ensure shortcuts work globally:
+
+```typescript
+document.addEventListener("keydown", handleKeyDown, true);
+document.addEventListener("keyup", handleKeyUp, true);
+```
+
+From `src/components/ui/dashimain.tsx:279-285`.
+
+### Key Detection
+
+Multiple key code checks ensure compatibility:
+
+```typescript
+// Check multiple ways to detect keys
+const isTKey = event.key === "t" || event.key === "T" || event.keyCode === 84;
+const isVKey = event.key === "v" || event.key === "V" || event.keyCode === 86;
+
+// Check modifier keys
+const hasModifiers = (event.metaKey || event.ctrlKey) && event.altKey;
+```
+
+## State Dependencies
+
+Shortcuts check multiple state variables before executing:
+
+- `isActivated`: Must be true for most shortcuts
+- `isExpanded`: Prevents duplicate voice expansion
+- `isActivatedState`: Tracks chat mode state
+- `isRecording`: Prevents overlapping recordings
+- `isResetting`: Disables shortcuts during reset animation
+
+From `src/components/ui/dashimain.tsx:148-156`:
+
+```typescript
+useEffect(() => {
+  const handleKeyDown = async (event: KeyboardEvent) => {
+    // Check state before processing
+  };
+}, [isActivated, isExpanded, isActivatedState, isRecording]);
+```
+
+## Platform Differences
+
+### macOS
+
+- **Meta key** (⌘ Command): `event.metaKey`
+- **Option key** (⌥): `event.altKey`
+- Shortcuts: Cmd+Opt+V, Cmd+Opt+T
+
+### Windows/Linux
+
+- **Control key**: `event.ctrlKey`
+- **Alt key**: `event.altKey`  
+- Shortcuts: Ctrl+Alt+V, Ctrl+Alt+T
+
+### Cross-Platform Check
+
+```typescript
+if ((event.metaKey || event.ctrlKey) && event.altKey && isVKey) {
+  // Works on both platforms
+}
+```
+
+## Shortcut Conflicts
+
+Dashi's shortcuts are designed to avoid common conflicts:
+
+- **Cmd+Opt+V**: Not commonly used by browsers or OS
+- **Cmd+Opt+T**: Not commonly used by browsers or OS
+- **ESC**: Standard for closing/canceling operations
+
+<Tip>
+If you experience conflicts with other applications, you can modify the key codes in the source at `src/components/ui/dashimain.tsx:179-214`.
+</Tip>
+
+## Debugging Shortcuts
+
+Keyboard events are logged to the console:
+
+```typescript
+console.log(
+  "Key pressed:",
+  event.key,
+  "KeyCode:",
+  event.keyCode,
+  "Meta:",
+  event.metaKey,
+  "Alt:",
+  event.altKey,
+  "Ctrl:",
+  event.ctrlKey
+);
+```
+
+From `src/components/ui/dashimain.tsx:159-170`.
+
+## Quick Reference
+
+| Shortcut | Action | Requirements |
+|----------|--------|-------------|
+| Click box | Activate Dashi | None |
+| **Cmd+Opt+V** / **Ctrl+Alt+V** | Voice recording | Dashi activated |
+| **Cmd+Opt+T** / **Ctrl+Alt+T** | Open chat | Dashi activated |
+| **ESC** | Reset to default | Any state |
+| **Enter** | Send message | Chat mode active |
+| **V** | Test voice mode | Development only |
+| **T** | Test chat mode | Development only |
+
+## Animation Timing
+
+All shortcut-triggered animations use consistent timing:
+
+- **Expansion**: 0.5s easeInOut
+- **Fade in**: 0.8s easeInOut
+- **Fade out**: 0.8s easeInOut
+- **Reset**: 0.8s easeInOut (with 800ms delay before state changes)
+
+From `src/components/ui/dashimain.tsx:429-436`:
+
+```typescript
+transition={{
+  duration: isResetting ? 0.8 : 0.5,
+  ease: "easeInOut",
+  opacity: {
+    duration: isResetting ? 0.8 : 0.5,
+    ease: "easeInOut",
+  },
+}}
+```

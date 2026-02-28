@@ -1,0 +1,256 @@
+---
+title: Letta Setup
+description: Set up and configure the Letta AI backend for Dashi's conversational features
+---
+
+Dashi uses [Letta](https://letta.ai) as its AI backend for conversational memory and stateful interactions. This guide walks you through setting up Letta locally.
+
+## What is Letta?
+
+Letta (formerly MemGPT) is an AI framework that provides:
+- Long-term conversational memory
+- Stateful AI agents
+- Streaming message support
+- Tool/function calling capabilities
+
+## Prerequisites
+
+<Steps>
+  <Step title="Install Python">
+    Letta requires Python 3.10 or higher. Check your version:
+    ```bash
+    python --version
+    ```
+  </Step>
+  
+  <Step title="Install Letta">
+    Install the Letta package:
+    ```bash
+    pip install letta
+    ```
+    
+    Or with uv (faster):
+    ```bash
+    uv pip install letta
+    ```
+  </Step>
+</Steps>
+
+## Starting the Letta Server
+
+<Steps>
+  <Step title="Start the server">
+    Run the Letta server on port 8283:
+    ```bash
+    letta server --port 8283
+    ```
+    
+    The server will start at `http://localhost:8283`.
+  </Step>
+  
+  <Step title="Create an agent">
+    In a new terminal, create a Letta agent:
+    ```bash
+    letta create-agent
+    ```
+    
+    Follow the prompts to configure your agent. **Save the agent ID** - you'll need it for Dashi configuration.
+  </Step>
+  
+  <Step title="Configure Dashi">
+    Update `src/lib/letta.ts` with your agent ID:
+    ```typescript
+    import { LettaClient } from "@letta-ai/letta-client";
+    
+    const agent_id = "agent-YOUR-AGENT-ID-HERE";
+    
+    export const letta_client = new LettaClient({
+      baseUrl: "http://localhost:8283",
+    });
+    ```
+  </Step>
+</Steps>
+
+## Letta Client Configuration
+
+The Letta client in Dashi is configured in `src/lib/letta.ts`:
+
+```typescript title="src/lib/letta.ts"
+import { LettaClient } from "@letta-ai/letta-client";
+
+// Your agent ID from Letta
+const agent_id = "agent-4d2e89d5-098b-469e-abe7-a671b4fed302";
+
+// Initialize the Letta client
+export const letta_client = new LettaClient({
+  baseUrl: "http://localhost:8283",
+});
+
+// Generate streaming responses
+export const generate_response = async (input: string) => {
+  const stream = await letta_client.agents.messages.createStream(agent_id, {
+    messages: [
+      {
+        role: "user",
+        content: input,
+      },
+    ],
+    streamTokens: true,
+  });
+  return stream;
+};
+```
+
+### Configuration Options
+
+**`agent_id`** - Your unique Letta agent identifier
+- Get this from `letta create-agent` or the Letta dashboard
+- Each agent has its own memory and personality
+
+**`baseUrl`** - Letta server endpoint
+- Default: `http://localhost:8283`
+- Change this if running Letta on a different port or remote server
+
+**`streamTokens`** - Enable token streaming
+- Set to `true` for real-time response streaming
+- Set to `false` to wait for complete response
+
+## Usage in Dashi
+
+Dashi uses the `generate_response` function to communicate with Letta:
+
+```typescript
+import { generate_response } from "@/lib/letta";
+
+// Send a message and stream the response
+const responseStream = await generate_response("Hello, Dashi!");
+
+// Process the stream
+for await (const chunk of responseStream) {
+  if (chunk.content && chunk.content !== "undefined") {
+    console.log(chunk.content);
+  }
+}
+```
+
+This pattern is used in:
+- Voice interactions (dashimain.tsx:248)
+- Chat interface (dashimain.tsx:312)
+
+## Advanced Configuration
+
+<AccordionGroup>
+  <Accordion title="Using a remote Letta server">
+    If you're running Letta on a remote server or cloud:
+    
+    ```typescript
+    export const letta_client = new LettaClient({
+      baseUrl: "https://your-letta-server.com",
+      // Add authentication if needed
+      // headers: {
+      //   "Authorization": "Bearer YOUR_TOKEN"
+      // }
+    });
+    ```
+  </Accordion>
+  
+  <Accordion title="Multiple agents">
+    You can configure multiple agents for different purposes:
+    
+    ```typescript
+    const CHAT_AGENT_ID = "agent-chat-id";
+    const VOICE_AGENT_ID = "agent-voice-id";
+    
+    export const generate_chat_response = async (input: string) => {
+      const stream = await letta_client.agents.messages.createStream(
+        CHAT_AGENT_ID,
+        { messages: [{ role: "user", content: input }], streamTokens: true }
+      );
+      return stream;
+    };
+    
+    export const generate_voice_response = async (input: string) => {
+      const stream = await letta_client.agents.messages.createStream(
+        VOICE_AGENT_ID,
+        { messages: [{ role: "user", content: input }], streamTokens: true }
+      );
+      return stream;
+    };
+    ```
+  </Accordion>
+  
+  <Accordion title="Custom agent personas">
+    Customize your agent's personality when creating it:
+    
+    ```bash
+    letta create-agent \
+      --name "Dashi" \
+      --persona "You are Dashi, a helpful and friendly AI assistant..." \
+      --human "The user is interacting with you through voice and text..."
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Connection refused error">
+    **Error:** `ECONNREFUSED` when connecting to Letta
+    
+    **Solutions:**
+    - Ensure the Letta server is running: `letta server --port 8283`
+    - Check the port matches in both server and `letta.ts`
+    - Verify no firewall is blocking port 8283
+  </Accordion>
+  
+  <Accordion title="Agent not found error">
+    **Error:** Agent ID not found or invalid
+    
+    **Solutions:**
+    - Double-check your agent ID in `letta.ts`
+    - List available agents: `letta list-agents`
+    - Create a new agent if needed: `letta create-agent`
+  </Accordion>
+  
+  <Accordion title="Slow response times">
+    **Issue:** Letta responses are taking too long
+    
+    **Solutions:**
+    - Check your LLM backend configuration in Letta
+    - Use a faster model (e.g., GPT-3.5 instead of GPT-4)
+    - Ensure `streamTokens: true` for better perceived performance
+    - Consider using a local model with Ollama
+  </Accordion>
+  
+  <Accordion title="Memory issues">
+    **Issue:** Agent doesn't remember previous conversations
+    
+    **Solutions:**
+    - Verify you're using the same `agent_id` across sessions
+    - Check Letta server logs for memory errors
+    - Try recreating the agent with proper memory configuration
+  </Accordion>
+</AccordionGroup>
+
+## Letta Resources
+
+<CardGroup cols={2}>
+  <Card title="Letta Documentation" icon="book" href="https://docs.letta.ai">
+    Official Letta documentation
+  </Card>
+  <Card title="Letta GitHub" icon="github" href="https://github.com/cpacker/MemGPT">
+    Source code and examples
+  </Card>
+  <Card title="Letta Discord" icon="discord" href="https://discord.gg/letta">
+    Community support
+  </Card>
+  <Card title="Client SDK Reference" icon="code" href="https://docs.letta.ai/client">
+    Letta client API reference
+  </Card>
+</CardGroup>
+
+## Next Steps
+
+<Card title="Customization" icon="palette" href="/guides/customization">
+  Learn how to customize Dashi's UI and animations
+</Card>

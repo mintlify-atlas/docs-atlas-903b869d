@@ -1,0 +1,305 @@
+---
+title: MCP Servers
+description: Integrate Model Context Protocol (MCP) servers with Dashi using CopilotKit
+---
+
+Dashi supports MCP (Model Context Protocol) server integration through CopilotKit, allowing your AI assistant to connect to external tools and data sources.
+
+## What is MCP?
+
+Model Context Protocol (MCP) is a standard protocol for connecting AI models to external tools, APIs, and data sources. It enables:
+- Tool/function calling
+- Real-time data access
+- API integrations
+- Custom capabilities
+
+## Prerequisites
+
+- Dashi installed and running
+- Basic understanding of CopilotKit
+- An MCP server endpoint (SSE format)
+
+## Basic Setup
+
+MCP servers are configured in `src/utils/McpManager.ts`:
+
+```typescript title="src/utils/McpManager.ts"
+"use client";
+
+import { useCopilotChat } from "@copilotkit/react-core";
+import { useEffect } from "react";
+
+function McpServerManager() {
+  const { setMcpServers } = useCopilotChat();
+
+  useEffect(() => {
+    setMcpServers([
+      {
+        // Try a sample MCP server at https://mcp.composio.dev/
+        endpoint: "your_mcp_sse_url",
+      },
+    ]);
+  }, [setMcpServers]);
+
+  return null;
+}
+
+export default McpServerManager;
+```
+
+## Configuration Steps
+
+<Steps>
+  <Step title="Get an MCP server endpoint">
+    You need an MCP server that speaks SSE (Server-Sent Events). Options:
+    
+    - **Composio MCP**: [mcp.composio.dev](https://mcp.composio.dev/) - Pre-built integrations
+    - **Custom MCP server**: Build your own following the [MCP specification](https://modelcontextprotocol.io)
+    - **Third-party MCP servers**: Check the [MCP server registry](https://github.com/modelcontextprotocol/servers)
+  </Step>
+  
+  <Step title="Update McpManager.ts">
+    Replace `"your_mcp_sse_url"` with your actual MCP server endpoint:
+    
+    ```typescript
+    setMcpServers([
+      {
+        endpoint: "https://mcp.composio.dev/your-server-id",
+      },
+    ]);
+    ```
+  </Step>
+  
+  <Step title="Import and use the manager">
+    Import `McpServerManager` in your app layout or main component:
+    
+    ```typescript
+    import McpServerManager from "@/utils/McpManager";
+    
+    export default function RootLayout({ children }) {
+      return (
+        <html>
+          <body>
+            <McpServerManager />
+            {children}
+          </body>
+        </html>
+      );
+    }
+    ```
+  </Step>
+</Steps>
+
+## Multiple MCP Servers
+
+You can connect to multiple MCP servers simultaneously:
+
+```typescript
+setMcpServers([
+  {
+    endpoint: "https://mcp.composio.dev/github",
+  },
+  {
+    endpoint: "https://mcp.composio.dev/slack",
+  },
+  {
+    endpoint: "https://your-custom-mcp.com/api",
+  },
+]);
+```
+
+## Authentication
+
+If your MCP server requires authentication, you can add headers:
+
+```typescript
+setMcpServers([
+  {
+    endpoint: "https://your-mcp-server.com/api",
+    headers: {
+      "Authorization": "Bearer YOUR_API_TOKEN",
+      "X-Custom-Header": "value",
+    },
+  },
+]);
+```
+
+<Warning>
+  Store sensitive tokens in environment variables, not directly in code:
+  ```typescript
+  headers: {
+    "Authorization": `Bearer ${process.env.NEXT_PUBLIC_MCP_TOKEN}`,
+  }
+  ```
+</Warning>
+
+## CopilotKit Integration
+
+Dashi uses CopilotKit to manage MCP connections. Key dependencies:
+
+```json title="package.json"
+{
+  "dependencies": {
+    "@copilotkit/react-core": "^1.9.1",
+    "@copilotkit/react-ui": "^1.9.1",
+    "use-mcp": "^0.0.9"
+  }
+}
+```
+
+### CopilotKit Features
+
+- **Automatic tool discovery**: CopilotKit detects available tools from MCP servers
+- **Function calling**: The AI can invoke MCP tools automatically
+- **Streaming support**: Real-time responses from MCP operations
+- **Error handling**: Built-in retry and error management
+
+## Example: Composio MCP Server
+
+[Composio](https://composio.dev) provides pre-built MCP servers for popular services.
+
+<Steps>
+  <Step title="Sign up for Composio">
+    Visit [composio.dev](https://composio.dev) and create an account.
+  </Step>
+  
+  <Step title="Create an MCP server">
+    In the Composio dashboard:
+    1. Navigate to MCP Servers
+    2. Create a new MCP server
+    3. Select the tools/integrations you need (GitHub, Slack, etc.)
+    4. Copy the SSE endpoint URL
+  </Step>
+  
+  <Step title="Configure Dashi">
+    Update `McpManager.ts` with your Composio endpoint:
+    
+    ```typescript
+    setMcpServers([
+      {
+        endpoint: "https://mcp.composio.dev/your-server-id",
+      },
+    ]);
+    ```
+  </Step>
+</Steps>
+
+## Custom MCP Server
+
+You can build your own MCP server using the MCP SDK:
+
+```typescript title="custom-mcp-server.ts"
+import { MCPServer } from "@modelcontextprotocol/sdk";
+
+const server = new MCPServer({
+  name: "my-custom-mcp",
+  version: "1.0.0",
+});
+
+// Register tools
+server.registerTool({
+  name: "get_weather",
+  description: "Get current weather for a location",
+  parameters: {
+    type: "object",
+    properties: {
+      location: { type: "string" },
+    },
+    required: ["location"],
+  },
+  handler: async ({ location }) => {
+    // Implement your tool logic
+    const weather = await fetchWeather(location);
+    return { temperature: weather.temp, conditions: weather.conditions };
+  },
+});
+
+// Start SSE server
+server.listen(3001);
+```
+
+Then connect it in Dashi:
+
+```typescript
+setMcpServers([
+  {
+    endpoint: "http://localhost:3001/sse",
+  },
+]);
+```
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="MCP server not connecting">
+    **Error:** Failed to connect to MCP server
+    
+    **Solutions:**
+    - Verify the endpoint URL is correct and accessible
+    - Check CORS settings on your MCP server
+    - Ensure the server is running and responding
+    - Check browser console for detailed error messages
+  </Accordion>
+  
+  <Accordion title="Tools not available">
+    **Issue:** AI doesn't see MCP tools
+    
+    **Solutions:**
+    - Verify `McpServerManager` is mounted in your app
+    - Check that `setMcpServers` is called in `useEffect`
+    - Confirm the MCP server returns valid tool definitions
+    - Check CopilotKit logs for tool discovery issues
+  </Accordion>
+  
+  <Accordion title="Authentication errors">
+    **Error:** 401 Unauthorized from MCP server
+    
+    **Solutions:**
+    - Verify your API token is valid and not expired
+    - Check that headers are properly formatted
+    - Ensure the token has required permissions
+    - Use environment variables for sensitive tokens
+  </Accordion>
+  
+  <Accordion title="CORS errors">
+    **Error:** Cross-origin request blocked
+    
+    **Solutions:**
+    - Add CORS headers to your MCP server:
+      ```
+      Access-Control-Allow-Origin: *
+      Access-Control-Allow-Methods: GET, POST, OPTIONS
+      Access-Control-Allow-Headers: Content-Type, Authorization
+      ```
+    - Use a proxy if you can't modify the MCP server
+    - For development, consider using `next.config.js` rewrites
+  </Accordion>
+</AccordionGroup>
+
+## MCP Resources
+
+<CardGroup cols={2}>
+  <Card title="MCP Specification" icon="book" href="https://modelcontextprotocol.io">
+    Official MCP protocol specification
+  </Card>
+  <Card title="MCP Server Registry" icon="server" href="https://github.com/modelcontextprotocol/servers">
+    Community MCP servers
+  </Card>
+  <Card title="Composio MCP" icon="plug" href="https://mcp.composio.dev">
+    Pre-built MCP integrations
+  </Card>
+  <Card title="CopilotKit Docs" icon="code" href="https://docs.copilotkit.ai">
+    CopilotKit documentation
+  </Card>
+</CardGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Customization" icon="palette" href="/guides/customization">
+    Customize Dashi's UI and animations
+  </Card>
+  <Card title="Configuration" icon="gear" href="/guides/configuration">
+    Configure Dashi settings
+  </Card>
+</CardGroup>

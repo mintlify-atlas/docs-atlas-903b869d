@@ -1,80 +1,191 @@
 ---
-title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+title: Quickstart
+description: Get Dashi up and running in minutes with this quick start guide.
 ---
 
-## Get started in three steps
+Get Dashi running on your local machine in just a few minutes.
 
-Get your documentation site running locally and make your first customization.
+## Prerequisites
 
-### Step 1: Set up your local environment
+Before you begin, make sure you have:
 
-<AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
-    
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
-  </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
-    
-    <Tip>Your preview updates automatically as you edit files.</Tip>
-  </Accordion>
-</AccordionGroup>
+- **Node.js 20+** or **Bun** installed
+- **Rust** and **Cargo** (for building the Tauri backend)
+- **Groq API key** for voice transcription
+- **Letta server** running locally (optional but recommended for AI features)
 
-### Step 2: Deploy your changes
+## Installation
 
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
-    
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
+<Steps>
+  <Step title="Clone the repository">
+    ```bash
+    git clone https://github.com/ehcaw/dashi.git
+    cd dashi
+    ```
+  </Step>
 
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
+  <Step title="Install dependencies">
+    <CodeGroup>
+    ```bash npm
+    npm install
+    ```
 
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
+    ```bash bun
+    bun install
+    ```
 
-### Step 3: Go live
+    ```bash pnpm
+    pnpm install
+    ```
 
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
+    ```bash yarn
+    yarn install
+    ```
+    </CodeGroup>
+  </Step>
 
-## Next steps
+  <Step title="Set up environment variables">
+    Create a `.env` file in the `src-tauri` directory:
 
-Now that you have your docs running, explore these key features:
+    ```bash
+    GROQ_API_KEY=your_groq_api_key_here
+    ```
+
+    Get your Groq API key from [groq.com](https://groq.com).
+  </Step>
+
+  <Step title="Start the Letta server (optional)">
+    If you want to use the AI chat features, start a Letta server:
+
+    ```bash
+    # Install Letta
+    pip install letta
+
+    # Start the server
+    letta server --port 8283
+    ```
+
+    The default configuration in `src/lib/letta.ts` expects the server at `http://localhost:8283`.
+  </Step>
+
+  <Step title="Run the development server">
+    <CodeGroup>
+    ```bash npm
+    npm run dev
+    ```
+
+    ```bash bun
+    bun dev
+    ```
+
+    ```bash pnpm
+    pnpm dev
+    ```
+
+    ```bash yarn
+    yarn dev
+    ```
+    </CodeGroup>
+
+    This starts the Next.js development server at [http://localhost:3000](http://localhost:3000).
+  </Step>
+
+  <Step title="Launch the desktop app">
+    To run Dashi as a desktop application with Tauri:
+
+    <CodeGroup>
+    ```bash npm
+    npm run tauri dev
+    ```
+
+    ```bash bun
+    bun tauri dev
+    ```
+
+    ```bash pnpm
+    pnpm tauri dev
+    ```
+
+    ```bash yarn
+    yarn tauri dev
+    ```
+    </CodeGroup>
+
+    The Tauri window will open with the Dashi interface.
+  </Step>
+</Steps>
+
+## First Interaction
+
+Once Dashi is running, you can interact with it:
+
+<Steps>
+  <Step title="Click to activate">
+    Click on the Dashi avatar to activate it. The opacity will increase from 0.1 to 0.3.
+  </Step>
+
+  <Step title="Try voice mode">
+    Press and hold **Cmd+Option+V** (macOS) or **Ctrl+Alt+V** (Windows/Linux) to start voice recording. Release to stop recording and get a transcription.
+
+    <Note>
+      The first time you use voice mode, your browser will ask for microphone permission.
+    </Note>
+  </Step>
+
+  <Step title="Try chat mode">
+    Press **Cmd+Option+T** (macOS) or **Ctrl+Alt+T** (Windows/Linux) to open the chat interface. Type a message and press **Send** or hit **Enter**.
+  </Step>
+
+  <Step title="Reset">
+    Press **ESC** to reset Dashi to its default state at any time.
+  </Step>
+</Steps>
+
+## What's Next?
 
 <CardGroup cols={2}>
-
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
-
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
-
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
-
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
-
+  <Card title="Voice Interaction" icon="microphone" href="/features/voice-interaction">
+    Learn about voice recording and transcription
+  </Card>
+  <Card title="Chat Interface" icon="comment" href="/features/chat-interface">
+    Explore the AI chat interface
+  </Card>
+  <Card title="Keyboard Shortcuts" icon="keyboard" href="/features/keyboard-shortcuts">
+    Master all keyboard shortcuts
+  </Card>
+  <Card title="Configuration" icon="gear" href="/guides/configuration">
+    Configure Dashi for your needs
+  </Card>
 </CardGroup>
 
-<Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
-</Note>
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Voice recording not working">
+    - Make sure you've granted microphone permissions in your browser
+    - Check that you have a valid Groq API key in `src-tauri/.env`
+    - Verify the Rust backend is running (it starts automatically with `tauri dev`)
+  </Accordion>
+
+  <Accordion title="Chat not responding">
+    - Ensure the Letta server is running at `http://localhost:8283`
+    - Check the agent ID in `src/lib/letta.ts` matches your Letta agent
+    - Look for errors in the browser console
+  </Accordion>
+
+  <Accordion title="Desktop app won't start">
+    - Make sure Rust and Cargo are installed: `cargo --version`
+    - Try rebuilding: `cargo clean` in the `src-tauri` directory
+    - Check that all Rust dependencies can be compiled
+  </Accordion>
+
+  <Accordion title="Next.js build errors">
+    - Delete `node_modules` and reinstall dependencies
+    - Clear Next.js cache: `rm -rf .next`
+    - Make sure you're using Node.js 20 or higher
+  </Accordion>
+</AccordionGroup>
+
+<Tip>
+  For more detailed setup instructions, see the [Installation](/installation) guide.
+</Tip>

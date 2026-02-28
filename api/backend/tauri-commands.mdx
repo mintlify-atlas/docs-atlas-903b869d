@@ -1,0 +1,390 @@
+---
+title: "Tauri Commands"
+description: "Backend command interface for Dashi's Tauri application"
+---
+
+## Overview
+
+Dashi's backend exposes Tauri commands that can be invoked from the frontend using the `@tauri-apps/api/core` package. These commands provide access to native functionality including audio transcription.
+
+## Command Registration
+
+Commands are registered in the Tauri builder during application initialization:
+
+```rust src-tauri/src/lib.rs
+mod audio;
+
+use audio::transcribe;
+
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
+pub fn run() {
+  tauri::Builder::default()
+    .setup(|app| {
+      if cfg!(debug_assertions) {
+        app.handle().plugin(
+          tauri_plugin_log::Builder::default()
+            .level(log::LevelFilter::Info)
+            .build(),
+        )?;
+      }
+      Ok(())
+    })
+    .invoke_handler(tauri::generate_handler![transcribe])
+    .run(tauri::generate_context!())
+    .expect("error while running tauri application");
+}
+```
+
+## Available Commands
+
+### transcribe
+
+Transcribes audio data using Groq's Whisper API.
+
+**Module**: `audio`  
+**Async**: Yes
+
+#### Rust Function Signature
+
+```rust src-tauri/src/audio.rs
+#[tauri::command]
+pub async fn transcribe(audio: Vec<f32>) -> Result<String, String>
+```
+
+#### Parameters
+
+<ParamField path="audio" type="Vec<f32>" required>
+  Array of PCM audio samples as 32-bit floating point values, normalized to [-1.0, 1.0]. Must be mono channel at 16kHz sample rate.
+</ParamField>
+
+#### Returns
+
+<ResponseField name="Success" type="String">
+  The transcribed text from the audio input
+</ResponseField>
+
+<ResponseField name="Error" type="String">
+  Error message if transcription fails
+</ResponseField>
+
+#### TypeScript Invocation
+
+```typescript
+import { invoke } from "@tauri-apps/api/core";
+
+const transcription = await invoke<string>("transcribe", {
+  audio: audioSamples, // Array of f32 values
+});
+```
+
+#### Example Usage
+
+```typescript src/lib/tts.ts
+const stopAndTranscribe = async (): Promise<string | null> => {
+  try {
+    // Get audio blob from MediaRecorder
+    const audioBlob = new Blob(audioChunks, { 
+      type: "audio/webm" 
+    });
+    
+    // Convert WebM to PCM at 16kHz
+    const audioContext = new AudioContext({ sampleRate: 16000 });
+    const arrayBuffer = await audioBlob.arrayBuffer();
+    const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+    const pcmData = audioBuffer.getChannelData(0); // Mono
+    const audioSamples = Array.from(pcmData);
+    
+    // Invoke Tauri command
+    const transcription = await invoke<string>("transcribe", {
+      audio: audioSamples,
+    });
+    
+    return transcription;
+  } catch (err) {
+    console.error("Transcription failed:", err);
+    return null;
+  }
+};
+```
+
+#### Processing Pipeline
+
+1. **Input Validation**: Receives PCM audio samples from frontend
+2. **WAV Encoding**: Converts float32 PCM to 16-bit WAV format
+3. **API Request**: Sends WAV data to Groq Whisper API
+4. **Response**: Returns transcribed text or error message
+
+See the [Transcription API](/api/backend/transcription) page for detailed implementation.
+
+## Invoking Commands from TypeScript
+
+### Import the API
+
+```typescript
+import { invoke } from "@tauri-apps/api/core";
+```
+
+### Basic Invocation Pattern
+
+```typescript
+const result = await invoke<ReturnType>("command_name", {
+  param1: value1,
+  param2: value2,
+});
+```
+
+### Error Handling
+
+```typescript
+try {
+  const result = await invoke<string>("transcribe", {
+    audio: audioSamples,
+  });
+  console.log("Success:", result);
+} catch (error) {
+  console.error("Command failed:", error);
+}
+```
+
+### Type Safety
+
+Specify the return type as a generic parameter:
+
+```typescript
+// String return type
+const text = await invoke<string>("transcribe", { audio });
+
+// Custom type
+interface TranscriptionResult {
+  text: string;
+  confidence: number;
+}
+const result = await invoke<TranscriptionResult>("custom_transcribe", { audio });
+```
+
+## Command Requirements
+
+To create a new Tauri command:
+
+1. **Add the `#[tauri::command]` attribute**
+
+```rust
+#[tauri::command]
+pub fn my_command(param: String) -> Result<String, String> {
+  // Implementation
+}
+```
+
+2. **Register in the invoke handler**
+
+```rust
+.invoke_handler(tauri::generate_handler![my_command, transcribe])
+```
+
+3. **Import and invoke from TypeScript**
+
+```typescript
+const result = await invoke<string>("my_command", {
+  param: "value",
+});
+```
+
+## Async Commands
+
+Commands can be asynchronous by using the `async` keyword:
+
+```rust
+#[tauri::command]
+pub async fn async_command(data: Vec<u8>) -> Result<String, String> {
+  let client = get_client().await;
+  let result = client.process(data).await;
+  
+  match result {
+    Ok(response) => Ok(response),
+    Err(e) => Err(e.to_string())
+  }
+}
+```
+
+From TypeScript, async commands are invoked the same way:
+
+```typescript
+const result = await invoke<string>("async_command", { data });
+```
+
+## Parameter Serialization
+
+Tauri automatically serializes parameters between TypeScript and Rust:
+
+### Simple Types
+
+| TypeScript | Rust |
+|------------|------|
+| `number` | `f64`, `i32`, `u32`, etc. |
+| `string` | `String` |
+| `boolean` | `bool` |
+| `Array<T>` | `Vec<T>` |
+| `object` | `struct` with `#[derive(serde::Deserialize)]` |
+
+### Complex Types
+
+```typescript
+interface AudioData {
+  samples: number[];
+  sampleRate: number;
+}
+
+const result = await invoke<string>("process_complex", {
+  audioData: {
+    samples: [0.1, 0.2, 0.3],
+    sampleRate: 16000,
+  },
+});
+```
+
+```rust
+use serde::Deserialize;
+
+#[derive(Deserialize)]
+struct AudioData {
+  samples: Vec<f32>,
+  sample_rate: u32,
+}
+
+#[tauri::command]
+pub fn process_complex(audio_data: AudioData) -> Result<String, String> {
+  // Use audio_data.samples and audio_data.sample_rate
+  Ok("Processed".to_string())
+}
+```
+
+## Logging
+
+The application uses `tauri-plugin-log` for logging in debug mode:
+
+```rust src-tauri/src/lib.rs
+if cfg!(debug_assertions) {
+  app.handle().plugin(
+    tauri_plugin_log::Builder::default()
+      .level(log::LevelFilter::Info)
+      .build(),
+  )?;
+}
+```
+
+Use Rust logging macros in commands:
+
+```rust
+use log::{info, warn, error};
+
+#[tauri::command]
+pub async fn transcribe(audio: Vec<f32>) -> Result<String, String> {
+  info!("Processing audio of {} samples", audio.len());
+  
+  match process_audio(audio) {
+    Ok(wav_data) => {
+      info!("WAV encoding successful: {} bytes", wav_data.len());
+      // Continue processing
+    }
+    Err(e) => {
+      error!("WAV encoding failed: {}", e);
+      return Err(e);
+    }
+  }
+}
+```
+
+## Dependencies
+
+Required for command functionality:
+
+```toml Cargo.toml
+[dependencies]
+tauri = { version = "2.5.0", features = [] }
+tauri-plugin-log = "2.0.0-rc"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+log = "0.4"
+```
+
+## Best Practices
+
+### Error Handling
+
+Always return `Result<T, String>` for proper error propagation:
+
+```rust
+#[tauri::command]
+pub fn my_command(input: String) -> Result<String, String> {
+  if input.is_empty() {
+    return Err("Input cannot be empty".to_string());
+  }
+  
+  match process(input) {
+    Ok(result) => Ok(result),
+    Err(e) => Err(format!("Processing failed: {}", e))
+  }
+}
+```
+
+### State Management
+
+Use `OnceCell` for singleton instances:
+
+```rust
+use tokio::sync::OnceCell;
+
+static CLIENT: OnceCell<MyClient> = OnceCell::const_new();
+
+async fn get_client() -> &'static MyClient {
+  CLIENT
+    .get_or_init(|| async {
+      MyClient::new().await
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn use_client() -> Result<String, String> {
+  let client = get_client().await;
+  // Use client
+}
+```
+
+### Type Safety
+
+Use strongly-typed structs instead of generic types:
+
+```rust
+#[derive(serde::Deserialize)]
+struct TranscribeRequest {
+  audio: Vec<f32>,
+  language: Option<String>,
+}
+
+#[derive(serde::Serialize)]
+struct TranscribeResponse {
+  text: String,
+  confidence: f32,
+}
+
+#[tauri::command]
+pub async fn transcribe_typed(
+  request: TranscribeRequest
+) -> Result<TranscribeResponse, String> {
+  // Implementation
+}
+```
+
+## Mobile Support
+
+The entry point supports mobile platforms:
+
+```rust
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
+pub fn run() {
+  // Application setup
+}
+```
+
+Commands work identically on mobile and desktop platforms.

@@ -1,0 +1,598 @@
+---
+title: Tauri Backend
+description: Deep dive into Dashi's Rust backend, audio processing pipeline, Groq API integration, and how Tauri commands work.
+---
+
+## Overview
+
+Dashi's backend is built with Tauri 2.5 and Rust, providing native desktop capabilities, efficient audio processing, and integration with the Groq API for speech-to-text transcription. The backend is lightweight, performant, and handles all native system operations.
+
+<CardGroup cols={2}>
+  <Card title="Native Performance" icon="rocket">
+    Rust provides near-native performance with memory safety
+  </Card>
+  <Card title="Audio Processing" icon="waveform">
+    Convert PCM audio to WAV format using Hound library
+  </Card>
+  <Card title="Async Operations" icon="bolt">
+    Tokio runtime for concurrent operations without blocking
+  </Card>
+  <Card title="Groq Integration" icon="cloud">
+    Custom Rust client for Groq Whisper API
+  </Card>
+</CardGroup>
+
+## Project Structure
+
+```
+src-tauri/
+├── src/
+│   ├── main.rs              # Platform-specific entry point
+│   ├── lib.rs               # Tauri app setup and command registration
+│   └── audio.rs             # Audio processing and transcription logic
+├── Cargo.toml               # Rust dependencies
+├── tauri.conf.json          # Tauri configuration
+├── groq_rs/                 # Custom Groq API client (submodule)
+└── icons/                   # App icons for different platforms
+```
+
+## Dependencies (Cargo.toml)
+
+```toml
+[package]
+name = "app"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.77.2"
+
+[lib]
+name = "app_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+log = "0.4"
+tauri = { version = "2.5.0", features = [] }
+tauri-plugin-log = "2.0.0-rc"
+hound = "3.5.1"                      # WAV encoding/decoding
+tokio = "1.45.1"                     # Async runtime
+once_cell = "1.21.3"                 # Lazy static initialization
+groq_api_rust = { path = "./groq_rs" }  # Custom Groq client
+dotenv = "0.15.0"                    # Environment variable loading
+
+[build-dependencies]
+tauri-build = { version = "2.2.0", features = [] }
+```
+
+## Core Modules
+
+### 1. Main Entry Point (`src/main.rs`)
+
+Platform-specific entry point:
+
+```rust
+// Prevents additional console window on Windows in release builds
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+
+fn main() {
+    app_lib::run();
+}
+```
+
+### 2. Tauri App Setup (`src/lib.rs`)
+
+Configures the Tauri application and registers commands:
+
+```rust
+mod audio;
+
+use audio::transcribe;
+
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
+pub fn run() {
+  tauri::Builder::default()
+    .setup(|app| {
+      // Enable logging in debug mode
+      if cfg!(debug_assertions) {
+        app.handle().plugin(
+          tauri_plugin_log::Builder::default()
+            .level(log::LevelFilter::Info)
+            .build(),
+        )?;
+      }
+      Ok(())
+    })
+    // Register the transcribe command
+    .invoke_handler(tauri::generate_handler![transcribe])
+    .run(tauri::generate_context!())
+    .expect("error while running tauri application");
+}
+```
+
+**Key Features:**
+- Conditional logging based on build mode (debug vs release)
+- Registers `transcribe` command for frontend invocation
+- Uses `tauri::generate_handler!` macro for type-safe command registration
+
+### 3. Audio Processing Module (`src/audio.rs`)
+
+The core audio processing and transcription logic:
+
+```rust
+use hound::{SampleFormat};
+use std::io::Cursor;
+use groq_api_rust::{AsyncGroqClient, SpeechToTextRequest};
+use std::env;
+use tokio::sync::OnceCell;
+
+// Singleton Groq client for reuse across requests
+static GROQ_CLIENT: OnceCell<AsyncGroqClient> = OnceCell::const_new();
+
+async fn get_client() -> &'static AsyncGroqClient {
+  GROQ_CLIENT
+    .get_or_init(|| async {
+      let api_key = env::var("GROQ_API_KEY")
+        .expect("GROQ_API_KEY env variable not set");
+      AsyncGroqClient::new(api_key.to_string(), None).await
+    })
+    .await
+}
+```
+
+#### Audio Processing Function
+
+```rust
+#[tauri::command]
+pub fn process_audio(audio: Vec<f32>) -> Result<Vec<u8>, String> {
+  // Define WAV file specification
+  let spec = hound::WavSpec {
+    channels: 1,           // Mono audio
+    sample_rate: 16000,    // 16kHz (Whisper optimal)
+    bits_per_sample: 16,   // 16-bit PCM
+    sample_format: SampleFormat::Int,
+  };
+
+  // Create in-memory buffer for WAV data
+  let mut buffer = Cursor::new(Vec::new());
+  
+  {
+    // Create WAV writer
+    let mut writer = hound::WavWriter::new(&mut buffer, spec)
+      .map_err(|e| e.to_string())?;
+
+    // Convert f32 samples to i16 and write to WAV
+    for &sample in &audio {
+      let sample_i16 = (sample * 32767.0) as i16;
+      writer.write_sample(sample_i16).map_err(|e| e.to_string())?;
+    }
+    
+    writer.finalize().map_err(|e| e.to_string())?;
+  }
+
+  Ok(buffer.into_inner())
+}
+```
+
+**Processing Steps:**
+1. Receive PCM audio as `Vec<f32>` (normalized -1.0 to 1.0)
+2. Create WAV specification (16kHz, mono, 16-bit)
+3. Convert float samples to 16-bit integers
+4. Write to in-memory buffer as WAV format
+5. Return raw WAV bytes
+
+#### Transcription Command
+
+```rust
+#[tauri::command]
+pub async fn transcribe(audio: Vec<f32>) -> Result<String, String> {
+  println!("Processing audio...");
+  
+  // Step 1: Convert PCM to WAV format
+  let wav_data = process_audio(audio)?;
+  println!("Audio processed, WAV size: {} bytes", wav_data.len());
+
+  // Step 2: Create speech-to-text request
+  let request = SpeechToTextRequest::new(wav_data)
+    .temperature(0.7)           // Randomness in transcription
+    .language("en")             // English language
+    .model("whisper-large-v3"); // Groq Whisper model
+
+  println!("Getting Groq client...");
+  
+  // Step 3: Get shared Groq client instance
+  let client = get_client().await;
+
+  println!("Sending request to Groq API...");
+  
+  // Step 4: Send request to Groq API
+  let result = client.speech_to_text(request).await;
+
+  // Step 5: Handle response
+  match result {
+    Ok(response) => {
+      println!("Groq API Success. Transcription: {}", response.text);
+      Ok(response.text)
+    }
+    Err(e) => {
+      eprintln!("Groq API Error: {:?}", e);
+      Err(format!("Failed to get response from Groq: {}", e))
+    }
+  }
+}
+```
+
+**Command Flow:**
+1. Receive audio samples from frontend (16kHz, mono, f32)
+2. Process audio to create WAV file in memory
+3. Build Groq API request with model parameters
+4. Get singleton Groq client (lazy initialization)
+5. Send WAV data to Groq API asynchronously
+6. Return transcribed text or error message
+
+## Tauri Commands
+
+### Command Registration
+
+Tauri commands are Rust functions annotated with `#[tauri::command]`:
+
+```rust
+#[tauri::command]
+pub async fn transcribe(audio: Vec<f32>) -> Result<String, String> {
+  // Implementation
+}
+```
+
+**Key Features:**
+- Async functions are supported (returns `Future`)
+- Arguments are automatically deserialized from JSON
+- Return type must implement `serde::Serialize`
+- Errors are automatically converted to strings
+
+### Frontend Invocation
+
+Frontend calls Rust commands via `invoke()`:
+
+```typescript
+import { invoke } from "@tauri-apps/api/core";
+
+const transcription = await invoke<string>("transcribe", {
+  audio: audioSamples, // Vec<f32>
+});
+```
+
+### Type Safety
+
+Tauri provides end-to-end type safety:
+
+| Frontend Type | Serialization | Rust Type |
+|---------------|---------------|------------|
+| `number[]` | JSON array | `Vec<f32>` |
+| `string` | JSON string | `String` |
+| `object` | JSON object | `struct` with `#[derive(Deserialize)]` |
+| `Promise<string>` | Return value | `Result<String, String>` |
+
+## Audio Processing Pipeline
+
+### 1. Frontend Audio Capture
+
+```typescript
+// Capture audio using MediaRecorder API
+const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+const mediaRecorder = new MediaRecorder(stream, { mimeType: "audio/webm" });
+```
+
+### 2. Convert WebM to PCM
+
+```typescript
+// Frontend converts WebM to PCM using Web Audio API
+const audioContext = new AudioContext({ sampleRate: 16000 });
+const arrayBuffer = await audioBlob.arrayBuffer();
+const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+const pcmData = audioBuffer.getChannelData(0); // Mono, f32 samples
+const audioSamples = Array.from(pcmData);
+```
+
+### 3. Send to Backend
+
+```typescript
+const transcription = await invoke<string>("transcribe", {
+  audio: audioSamples, // f32 array
+});
+```
+
+### 4. Backend Processing
+
+```rust
+// Backend receives Vec<f32>
+// Converts to WAV format with Hound
+let wav_data = process_audio(audio)?;
+
+// Sends to Groq API
+let request = SpeechToTextRequest::new(wav_data);
+let result = client.speech_to_text(request).await;
+```
+
+### 5. Return Transcription
+
+```rust
+Ok(response.text) // String
+```
+
+## Groq API Integration
+
+### Custom Groq Client
+
+Dashi uses a custom Groq API client (`groq_rs`) for Rust:
+
+```rust
+use groq_api_rust::{AsyncGroqClient, SpeechToTextRequest};
+
+// Initialize client with API key
+let client = AsyncGroqClient::new(api_key, None).await;
+
+// Create speech-to-text request
+let request = SpeechToTextRequest::new(wav_data)
+  .temperature(0.7)
+  .language("en")
+  .model("whisper-large-v3");
+
+// Send request
+let result = client.speech_to_text(request).await;
+```
+
+### API Configuration
+
+<CardGroup cols={2}>
+  <Card title="Model" icon="brain">
+    `whisper-large-v3` - Groq's hosted Whisper model
+  </Card>
+  <Card title="Temperature" icon="thermometer">
+    `0.7` - Balance between accuracy and creativity
+  </Card>
+  <Card title="Language" icon="language">
+    `en` - English language transcription
+  </Card>
+  <Card title="Format" icon="file-audio">
+    WAV - 16kHz, mono, 16-bit PCM
+  </Card>
+</CardGroup>
+
+### Environment Variables
+
+The Groq API key is loaded from environment:
+
+```bash
+# .env file
+GROQ_API_KEY=your_api_key_here
+```
+
+```rust
+use std::env;
+
+let api_key = env::var("GROQ_API_KEY")
+  .expect("GROQ_API_KEY env variable not set");
+```
+
+## Async Runtime (Tokio)
+
+Dashi uses Tokio for async operations:
+
+```rust
+use tokio::sync::OnceCell;
+
+// Lazy initialization of async resources
+static GROQ_CLIENT: OnceCell<AsyncGroqClient> = OnceCell::const_new();
+
+async fn get_client() -> &'static AsyncGroqClient {
+  GROQ_CLIENT
+    .get_or_init(|| async {
+      // Initialize client only once
+      AsyncGroqClient::new(api_key, None).await
+    })
+    .await
+}
+```
+
+**Benefits:**
+- Non-blocking I/O operations
+- Efficient resource usage
+- Singleton pattern for Groq client (no repeated initialization)
+
+## Error Handling
+
+### Result Type Pattern
+
+All Tauri commands return `Result<T, String>`:
+
+```rust
+#[tauri::command]
+pub async fn transcribe(audio: Vec<f32>) -> Result<String, String> {
+  let wav_data = process_audio(audio)?; // ? operator propagates errors
+  
+  match client.speech_to_text(request).await {
+    Ok(response) => Ok(response.text),
+    Err(e) => Err(format!("Failed to get response from Groq: {}", e)),
+  }
+}
+```
+
+### Error Propagation
+
+Errors are converted to strings and sent to frontend:
+
+```typescript
+try {
+  const transcription = await invoke<string>("transcribe", { audio });
+} catch (error) {
+  console.error("Transcription failed:", error);
+  alert("Failed to transcribe audio: " + error);
+}
+```
+
+## Logging and Debugging
+
+Tauri provides logging via the `log` crate:
+
+```rust
+use log::{info, warn, error};
+
+println!("Processing audio...");          // Simple output
+info!("Audio processed: {} bytes", len);  // Structured logging
+error!("Groq API Error: {:?}", e);        // Error logging
+```
+
+### Log Levels
+
+```rust
+app.handle().plugin(
+  tauri_plugin_log::Builder::default()
+    .level(log::LevelFilter::Info) // Info, Warn, Error
+    .build(),
+)?;
+```
+
+## Performance Optimizations
+
+<CardGroup cols={2}>
+  <Card title="Singleton Client" icon="recycle">
+    Groq client is initialized once and reused across requests
+  </Card>
+  <Card title="In-Memory Processing" icon="memory">
+    WAV files are created in memory (no disk I/O)
+  </Card>
+  <Card title="Async Operations" icon="bolt">
+    Tokio async runtime prevents blocking on network calls
+  </Card>
+  <Card title="Efficient Encoding" icon="gauge-high">
+    Hound library provides fast WAV encoding with minimal allocations
+  </Card>
+</CardGroup>
+
+## Security Considerations
+
+### API Key Management
+
+```rust
+// Load from environment, not hardcoded
+let api_key = env::var("GROQ_API_KEY")
+  .expect("GROQ_API_KEY env variable not set");
+```
+
+### Memory Safety
+
+Rust's ownership system prevents:
+- Buffer overflows
+- Use-after-free errors
+- Data races
+- Null pointer dereferences
+
+### Input Validation
+
+Validate audio data before processing:
+
+```rust
+if audio.is_empty() {
+  return Err("Audio data is empty".to_string());
+}
+
+if audio.len() > MAX_AUDIO_LENGTH {
+  return Err("Audio data exceeds maximum length".to_string());
+}
+```
+
+## Building and Distribution
+
+### Development Build
+
+```bash
+npm run dev
+# or
+cargo tauri dev
+```
+
+### Production Build
+
+```bash
+cargo tauri build
+```
+
+**Output:**
+- macOS: `.dmg` and `.app`
+- Windows: `.exe` and `.msi`
+- Linux: `.deb`, `.AppImage`
+
+### Code Signing
+
+Configure in `tauri.conf.json`:
+
+```json
+{
+  "bundle": {
+    "identifier": "com.dashi.app",
+    "icon": [
+      "icons/32x32.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ]
+  }
+}
+```
+
+## Extending the Backend
+
+### Adding New Commands
+
+1. **Define command in `src/audio.rs`:**
+
+```rust
+#[tauri::command]
+pub async fn new_command(param: String) -> Result<String, String> {
+  // Implementation
+  Ok("Success".to_string())
+}
+```
+
+2. **Register in `src/lib.rs`:**
+
+```rust
+use audio::{transcribe, new_command};
+
+.invoke_handler(tauri::generate_handler![transcribe, new_command])
+```
+
+3. **Invoke from frontend:**
+
+```typescript
+const result = await invoke<string>("new_command", {
+  param: "value",
+});
+```
+
+### Adding Dependencies
+
+Add to `Cargo.toml`:
+
+```toml
+[dependencies]
+new_crate = "1.0"
+```
+
+Run:
+```bash
+cargo build
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Architecture" href="/development/architecture" icon="sitemap">
+    Understand the full system architecture
+  </Card>
+  <Card title="Components" href="/development/components" icon="boxes">
+    Explore the React component structure
+  </Card>
+  <Card title="Contributing" href="/development/contributing" icon="git-branch">
+    Contribute to Dashi backend development
+  </Card>
+</CardGroup>
