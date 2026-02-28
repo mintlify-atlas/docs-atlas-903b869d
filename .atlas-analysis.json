@@ -1,0 +1,95 @@
+{
+  "projectType": "frontend",
+  "projectName": "Dashi",
+  "projectDescription": "An AI-powered voice assistant desktop app with chat interface, voice transcription, and animated interactions built with Next.js and Tauri",
+  "theme": "palm",
+  "primaryColor": "#8CEBE5",
+  "lightColor": "#D500D8",
+  "darkColor": "#8CEBE5",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "quickstart",
+              "installation"
+            ]
+          },
+          {
+            "group": "Features",
+            "pages": [
+              "features/voice-interaction",
+              "features/chat-interface",
+              "features/ai-integration",
+              "features/keyboard-shortcuts"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "guides/configuration",
+              "guides/letta-setup",
+              "guides/mcp-servers",
+              "guides/customization"
+            ]
+          },
+          {
+            "group": "Development",
+            "pages": [
+              "development/architecture",
+              "development/components",
+              "development/tauri-backend",
+              "development/contributing"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Components",
+            "pages": [
+              "api/components/animated-vector-box",
+              "api/components/overlay",
+              "api/components/ui"
+            ]
+          },
+          {
+            "group": "Hooks",
+            "pages": [
+              "api/hooks/use-voice-recorder"
+            ]
+          },
+          {
+            "group": "Backend",
+            "pages": [
+              "api/backend/transcription",
+              "api/backend/tauri-commands"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Voice recording and transcription using Groq API",
+    "AI chat interface powered by Letta AI",
+    "Animated UI with SVG and Lottie animations",
+    "Desktop application built with Tauri and Next.js",
+    "Keyboard shortcuts for voice and chat modes",
+    "CopilotKit integration for MCP server support"
+  ],
+  "publicApiSurface": [
+    "AnimatedVectorBox component",
+    "useVoiceRecorder hook",
+    "generate_response function",
+    "letta_client instance",
+    "transcribe Tauri command",
+    "McpServerManager component"
+  ]
+}
