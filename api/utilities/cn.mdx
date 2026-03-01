@@ -1,0 +1,269 @@
+---
+title: cn Utility
+description: Class name merging utility function for Tailwind CSS.
+---
+
+The `cn` utility function is used throughout Dashi to merge Tailwind CSS class names with proper conflict resolution.
+
+## Import
+
+```tsx
+import { cn } from "@/lib/utils";
+```
+
+## Function Signature
+
+```typescript src/lib/utils.ts
+export function cn(...inputs: ClassValue[]): string
+```
+
+## Parameters
+
+<ParamField path="inputs" type="ClassValue[]" required>
+  Variable number of class name arguments. Each can be:
+  - A string of class names
+  - An object with boolean values (conditional classes)
+  - An array of class values
+  - `null`, `undefined`, or `false` (ignored)
+</ParamField>
+
+## Returns
+
+A merged string of class names with conflicts resolved intelligently. Later classes override earlier ones when they conflict.
+
+## Implementation
+
+```typescript src/lib/utils.ts
+import { clsx, type ClassValue } from "clsx"
+import { twMerge } from "tailwind-merge"
+
+export function cn(...inputs: ClassValue[]) {
+  return twMerge(clsx(inputs))
+}
+```
+
+The function combines two utilities:
+- **clsx**: Handles conditional class names and various input formats
+- **twMerge**: Intelligently merges Tailwind classes, removing conflicts
+
+## Usage Examples
+
+### Basic Class Merging
+
+```tsx
+import { cn } from "@/lib/utils";
+
+// Merge multiple class strings
+const classes = cn("px-4 py-2", "bg-blue-500 text-white");
+// Result: "px-4 py-2 bg-blue-500 text-white"
+```
+
+### Conditional Classes
+
+```tsx
+// Object syntax with conditions
+const classes = cn({
+  "bg-blue-500": isPrimary,
+  "bg-gray-500": !isPrimary,
+  "opacity-50": isDisabled,
+});
+```
+
+### Conflict Resolution
+
+```tsx
+// Later classes override earlier ones
+const classes = cn("px-2 py-1", "px-4");
+// Result: "py-1 px-4" (px-2 removed, px-4 kept)
+
+// Works with responsive utilities
+const classes = cn("text-sm", "md:text-base", "text-lg");
+// Result: "md:text-base text-lg" (text-sm removed)
+```
+
+### Component Props Integration
+
+```tsx
+import { cn } from "@/lib/utils";
+
+interface ButtonProps {
+  className?: string;
+  variant?: "primary" | "secondary";
+}
+
+function Button({ className, variant = "primary" }: ButtonProps) {
+  return (
+    <button
+      className={cn(
+        "px-4 py-2 rounded-md font-medium",
+        variant === "primary" && "bg-blue-500 text-white",
+        variant === "secondary" && "bg-gray-200 text-gray-900",
+        className // User's custom classes override defaults
+      )}
+    >
+      Click me
+    </button>
+  );
+}
+
+// Usage
+<Button className="px-6 shadow-lg" variant="primary" />
+// Result: px-6 py-2 rounded-md font-medium bg-blue-500 text-white shadow-lg
+```
+
+### Array Input
+
+```tsx
+const baseClasses = ["flex", "items-center"];
+const conditionalClasses = isActive ? ["bg-blue-500", "text-white"] : null;
+
+const classes = cn(baseClasses, conditionalClasses, "gap-2");
+```
+
+## Real Usage in Dashi
+
+### Button Component
+
+```tsx src/components/ui/button.tsx
+const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
+  ({ className, variant, size, asChild = false, ...props }, ref) => {
+    const Comp = asChild ? Slot : "button";
+    return (
+      <Comp
+        className={cn(buttonVariants({ variant, size, className }))}
+        ref={ref}
+        {...props}
+      />
+    );
+  }
+);
+```
+
+### Card Component
+
+```tsx src/components/ui/card.tsx
+const Card = React.forwardRef<HTMLDivElement, CardProps>(
+  ({ className, ...props }, ref) => (
+    <div
+      ref={ref}
+      className={cn(
+        "bg-card rounded-xl border py-6 shadow-sm flex flex-col gap-6",
+        className
+      )}
+      {...props}
+    />
+  )
+);
+```
+
+### Input Component
+
+```tsx src/components/ui/input.tsx
+const Input = React.forwardRef<HTMLInputElement, InputProps>(
+  ({ className, type, ...props }, ref) => {
+    return (
+      <input
+        type={type}
+        className={cn(
+          "flex h-9 w-full rounded-md border border-input bg-transparent px-3",
+          "shadow-xs transition-colors placeholder:text-muted-foreground",
+          "focus-visible:outline-hidden focus-visible:ring-[3px]",
+          className
+        )}
+        ref={ref}
+        {...props}
+      />
+    );
+  }
+);
+```
+
+## Why Use cn?
+
+### Without cn (Problems)
+
+```tsx
+// ❌ Conflicting classes aren't removed
+<div className={`px-2 ${className}`} />
+// If className="px-4", result: "px-2 px-4" (both applied, unpredictable)
+
+// ❌ Conditional classes are verbose
+<div className={`base ${condition ? 'active' : ''} ${other ? 'other' : ''}`} />
+```
+
+### With cn (Solutions)
+
+```tsx
+// ✅ Conflicts resolved automatically
+<div className={cn("px-2", className)} />
+// If className="px-4", result: "px-4" (only px-4 applied)
+
+// ✅ Conditional classes are clean
+<div className={cn("base", condition && "active", other && "other")} />
+```
+
+## Dependencies
+
+```json package.json
+{
+  "dependencies": {
+    "clsx": "^2.1.1",
+    "tailwind-merge": "^3.3.1"
+  }
+}
+```
+
+## Type Safety
+
+The `ClassValue` type from `clsx` accepts:
+
+```typescript
+type ClassValue = 
+  | string
+  | number
+  | ClassDictionary
+  | ClassArray
+  | undefined
+  | null
+  | boolean
+```
+
+This provides full type safety for all class name patterns.
+
+## Best Practices
+
+1. **Always use cn for components that accept className props**
+   ```tsx
+   // ✅ Good
+   <Component className={cn(baseStyles, props.className)} />
+   
+   // ❌ Bad
+   <Component className={`${baseStyles} ${props.className}`} />
+   ```
+
+2. **Put user-provided className last**
+   ```tsx
+   // ✅ User can override defaults
+   cn("default-classes", className)
+   
+   // ❌ User classes are overridden
+   cn(className, "default-classes")
+   ```
+
+3. **Use conditional syntax for clarity**
+   ```tsx
+   // ✅ Clear and concise
+   cn("base", isActive && "active", isDisabled && "disabled")
+   
+   // ❌ Verbose
+   cn("base", isActive ? "active" : "", isDisabled ? "disabled" : "")
+   ```
+
+4. **Leverage object syntax for complex conditions**
+   ```tsx
+   cn({
+     "bg-blue-500": variant === "primary",
+     "bg-green-500": variant === "success",
+     "bg-red-500": variant === "danger",
+   })
+   ```

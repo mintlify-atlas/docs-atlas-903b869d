@@ -37,6 +37,52 @@ pub fn run() {
 
 ## Available Commands
 
+### process_audio
+
+Converts PCM audio samples to WAV format.
+
+**Module**: `audio`  
+**Async**: No
+
+#### Rust Function Signature
+
+```rust src-tauri/src/audio.rs
+#[tauri::command]
+pub fn process_audio(audio: Vec<f32>) -> Result<Vec<u8>, String>
+```
+
+#### Parameters
+
+<ParamField path="audio" type="Vec<f32>" required>
+  Array of PCM audio samples as 32-bit floating point values, normalized to [-1.0, 1.0]. Must be mono channel.
+</ParamField>
+
+#### Returns
+
+<ResponseField name="Success" type="Vec<u8>">
+  WAV-encoded audio data as a byte array with the following specs:
+  - Channels: 1 (mono)
+  - Sample Rate: 16000 Hz
+  - Bits Per Sample: 16
+  - Format: PCM integer
+</ResponseField>
+
+<ResponseField name="Error" type="String">
+  Error message if WAV encoding fails
+</ResponseField>
+
+#### Processing Details
+
+The function:
+1. Creates a WAV specification (mono, 16kHz, 16-bit PCM)
+2. Converts float32 samples to int16 by multiplying by 32767
+3. Writes WAV data to an in-memory buffer
+4. Returns the encoded byte array
+
+This command is primarily used internally by the `transcribe` command but can be invoked separately if you need WAV encoding without transcription.
+
+---
+
 ### transcribe
 
 Transcribes audio data using Groq's Whisper API.

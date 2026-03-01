@@ -67,6 +67,7 @@
             "group": "Components",
             "pages": [
               "api/components/animated-vector-box",
+              "api/components/music-notes",
               "api/components/overlay",
               "api/components/ui"
             ]
@@ -75,6 +76,12 @@
             "group": "Hooks",
             "pages": [
               "api/hooks/use-voice-recorder"
+            ]
+          },
+          {
+            "group": "Utilities",
+            "pages": [
+              "api/utilities/cn"
             ]
           },
           {
